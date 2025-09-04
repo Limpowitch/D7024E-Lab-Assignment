@@ -1,0 +1,21 @@
+name: labassignment
+
+services:
+  node:
+    build: .
+    image: lab-node:latest
+    environment:
+      PORT: "8080"
+      # NODE_ID optional; code will default to hostname if not set
+    networks:
+      - labnet
+
+  netshoot:
+    image: nicolaka/netshoot
+    command: ["sleep", "infinity"]
+    networks:
+      - labnet
+
+networks:
+  labnet:
+    driver: bridge
