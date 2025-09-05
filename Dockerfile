@@ -19,3 +19,6 @@ ENV PORT=8080
 EXPOSE 8080
 COPY --from=build /out/node /usr/local/bin/node
 ENTRYPOINT ["usr/local/bin/node"]
+
+
+### EVERYTHING ABOVE IS FROM SPRINT 0
