@@ -2,13 +2,12 @@ package node
 
 import (
 	"sync"
-	"time"
 )
 
 type Contact struct {
-	ID       [20]byte
-	Host     string
-	LastSeen time.Time
+	ID   [20]byte
+	Host string
+	//LastSeen time.Time		//commented out for now
 }
 type Kbucket struct {
 	Capacity   int
@@ -18,13 +17,20 @@ type Kbucket struct {
 	mu         sync.RWMutex
 }
 
-func NewKBucket(k int, lower, upper [20]byte, collection []Contact) Kbucket {
+func NewContact(node Node) (Contact, error) {
+	return Contact{
+		ID:   node.NodeID,
+		Host: node.Hostname,
+	}, nil
+}
+
+func NewKBucket(k int, lower, upper [20]byte, collection []Contact) (Kbucket, error) {
 	return Kbucket{
 		Capacity:   k,
 		LowerLimit: lower,
 		UpperLimit: upper,
 		Contacts:   collection,
-	}
+	}, nil
 }
 
 func (kb *Kbucket) AddToKBucket(id Contact) { // We simply append here, no capacity check needed (will be handled elsewere)
@@ -57,8 +63,8 @@ func SplitBucket(originBucket Kbucket) (Kbucket, Kbucket) {
 		}
 	}
 
-	kb1 := NewKBucket(originBucket.Capacity, kb1Lower, kb1Upper, kb1Contacts) // Bucket1 = [originbucket.lower, mid]
-	kb2 := NewKBucket(originBucket.Capacity, kb2Lower, kb2Upper, kb2Contacts) // Bucket2 = [mid + 1, originbucket.upper]
+	kb1, _ := NewKBucket(originBucket.Capacity, kb1Lower, kb1Upper, kb1Contacts) // Bucket1 = [originbucket.lower, mid]
+	kb2, _ := NewKBucket(originBucket.Capacity, kb2Lower, kb2Upper, kb2Contacts) // Bucket2 = [mid + 1, originbucket.upper]
 	return kb1, kb2
 }
 

@@ -4,10 +4,10 @@ type RoutingTable struct {
 	BucketList []Kbucket
 }
 
-func NewRoutingTable() RoutingTable {
+func NewRoutingTable() (RoutingTable, error) {
 	return RoutingTable{
 		BucketList: make([]Kbucket, 0),
-	}
+	}, nil
 }
 
 func (rt *RoutingTable) AddToRT(value Kbucket) {

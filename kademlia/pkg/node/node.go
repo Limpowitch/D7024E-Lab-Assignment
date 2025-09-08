@@ -23,11 +23,13 @@ func NewNode(hostname string) (*Node, error) {
 		return nil, fmt.Errorf("failed to generate node ID: %w", err)
 	}
 
+	rt, _ := NewRoutingTable()
+
 	return &Node{
 		NodeID:       id,
 		Hostname:     hostname,
 		NodeStorage:  make(map[string]Value),
-		RoutingTable: NewRoutingTable(),
+		RoutingTable: rt,
 	}, nil
 }
 

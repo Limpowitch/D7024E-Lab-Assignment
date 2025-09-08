@@ -9,11 +9,11 @@ type Value struct {
 	ExpiresAt time.Time
 }
 
-func NewValue(data []byte, ttl time.Duration) Value {
+func NewValue(data []byte, ttl time.Duration) (Value, error) {
 	return Value{
-		Data:      append([]byte(nil), data...), // copy the data and append in new []byte
-		ExpiresAt: time.Now().Add(ttl),          // ttl for value object
-	}
+		Data:      append([]byte(nil), data...),
+		ExpiresAt: time.Now().Add(ttl),
+	}, nil
 }
 
 func (v Value) Expired(now time.Time) bool { // Future implimentation...
