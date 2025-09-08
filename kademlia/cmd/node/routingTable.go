@@ -1,4 +1,4 @@
-package node
+package main
 
 type RoutingTable struct {
 	BucketList []Kbucket

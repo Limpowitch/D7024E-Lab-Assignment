@@ -1,24 +1,13 @@
-name: labassignment
-
+# docker-compose.yml
 services:
   node:
-    build: .
-    image: lab-node:latest
+    image: kadlab:latest           # or use "build: ." if you prefer
+    command: ["/app/node", "-bind", ":9999"]
     environment:
-      PORT: "8080"
-      # NODE_ID optional; code will default to hostname if not set
-    networks:
-      - labnet
-
-  netshoot:
-    image: nicolaka/netshoot
-    command: ["sleep", "infinity"]
-    networks:
-      - labnet
+      - INSTANCE=${HOSTNAME:-node}
+    networks: [kadnet]
+    restart: unless-stopped
 
 networks:
-  labnet:
+  kadnet:
     driver: bridge
-
-
-### EVERYTHING ABOVE IS FROM SPRINT 0

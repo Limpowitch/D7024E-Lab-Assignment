@@ -1,24 +1,22 @@
 # syntax=docker/dockerfile:1
 
-### Build stage
-FROM golang:1.23.5-alpine AS build
+# Use a Go version >= what's required in go.mod (1.25.x here)
+FROM golang:1.25.1-alpine AS build
 WORKDIR /src
 
-# Cache deps (no go.sum in this project yet)
-COPY go.mod ./
-RUN go mod download
+# you need git for 'go mod download' when deps are fetched from VCS
+RUN apk add --no-cache git
 
-# Build
+# If you *do* have a go.sum, copy both; otherwise copy only go.mod
+COPY go.mod go.sum ./
+RUN go env && go mod download
+
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags="-s -w" -o /out/node ./cmd/main
+RUN CGO_ENABLED=0 go build -o /app/node ./kademlia/cmd/node
 
-### Runtime stage
 FROM alpine:3.20
-ENV PORT=8080
-EXPOSE 8080
-COPY --from=build /out/node /usr/local/bin/node
-ENTRYPOINT ["usr/local/bin/node"]
-
-
-### EVERYTHING ABOVE IS FROM SPRINT 0
+WORKDIR /app
+COPY --from=build /app/node /app/node
+RUN chmod +x /app/node
+EXPOSE 9999/udp
+ENTRYPOINT ["/app/node"]
