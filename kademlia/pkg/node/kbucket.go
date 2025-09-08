@@ -1,38 +1,36 @@
 package node
 
 import (
-	"math/big"
 	"sync"
 	"time"
 )
 
 type Contact struct {
-	ID       *big.Int
+	ID       [20]byte
 	Host     string
 	LastSeen time.Time
 }
-
 type Kbucket struct {
 	Capacity   int
-	LowerLimit *big.Int
-	UpperLimit *big.Int
+	LowerLimit [20]byte
+	UpperLimit [20]byte
 	Contacts   []Contact
 	mu         sync.RWMutex
 }
 
-func NewKBucket(k int, lower, upper *big.Int, collection []Contact) Kbucket {
+func NewKBucket(k int, lower, upper [20]byte, collection []Contact) Kbucket {
 	return Kbucket{
 		Capacity:   k,
-		LowerLimit: new(big.Int).Set(lower),
-		UpperLimit: new(big.Int).Set(upper),
+		LowerLimit: lower,
+		UpperLimit: upper,
 		Contacts:   collection,
 	}
 }
 
-func (kb *Kbucket) AddToKBucket(contact Contact) {
+func (kb *Kbucket) AddToKBucket(id Contact) { // We simply append here, no capacity check needed (will be handled elsewere)
 	kb.mu.Lock()
 	defer kb.mu.Unlock()
-	kb.Contacts = append(kb.Contacts, contact)
+	kb.Contacts = append(kb.Contacts, id)
 }
 
 func (kb *Kbucket) ListIDs() []Contact {
@@ -41,47 +39,62 @@ func (kb *Kbucket) ListIDs() []Contact {
 	return append([]Contact(nil), kb.Contacts...)
 }
 
-func SplitBucket(originBucket Kbucket, newValue Contact) (Kbucket, Kbucket) {
-	// Calculate midpoint: (upper + lower) / 2
-	sum := new(big.Int).Add(originBucket.LowerLimit, originBucket.UpperLimit)
-	midPoint := new(big.Int).Div(sum, big.NewInt(2))
+func SplitBucket(originBucket Kbucket) (Kbucket, Kbucket) {
 
-	// Second bucket starts at midPoint + 1
-	nextPoint := new(big.Int).Add(midPoint, big.NewInt(1))
+	mid := midpoint(originBucket.LowerLimit, originBucket.UpperLimit)
+
+	kb1Lower := originBucket.LowerLimit
+	kb1Upper := mid
+	kb2Lower := addOne(mid)
+	kb2Upper := originBucket.UpperLimit
 
 	var kb1Contacts, kb2Contacts []Contact
-
-	// Split existing contacts
-	for _, contact := range originBucket.Contacts {
-		if contact.ID.Cmp(midPoint) <= 0 {
-			kb1Contacts = append(kb1Contacts, contact)
+	for _, c := range originBucket.Contacts {
+		if compare(c.ID, kb1Lower) >= 0 && compare(c.ID, kb1Upper) <= 0 {
+			kb1Contacts = append(kb1Contacts, c)
 		} else {
-			kb2Contacts = append(kb2Contacts, contact)
+			kb2Contacts = append(kb2Contacts, c)
 		}
 	}
 
-	// Add new contact to appropriate bucket
-	if newValue.ID.Cmp(midPoint) <= 0 {
-		kb1Contacts = append(kb1Contacts, newValue)
-	} else {
-		kb2Contacts = append(kb2Contacts, newValue)
-	}
-
-	kb1 := NewKBucket(originBucket.Capacity, originBucket.LowerLimit, midPoint, kb1Contacts)
-	kb2 := NewKBucket(originBucket.Capacity, nextPoint, originBucket.UpperLimit, kb2Contacts)
-
+	kb1 := NewKBucket(originBucket.Capacity, kb1Lower, kb1Upper, kb1Contacts) // Bucket1 = [originbucket.lower, mid]
+	kb2 := NewKBucket(originBucket.Capacity, kb2Lower, kb2Upper, kb2Contacts) // Bucket2 = [mid + 1, originbucket.upper]
 	return kb1, kb2
 }
 
-// Helper function to create max 160-bit value (2^160 - 1)
-func Max160BitInt() *big.Int {
-	max := new(big.Int)
-	max.Exp(big.NewInt(2), big.NewInt(160), nil) // 2^160
-	max.Sub(max, big.NewInt(1))                  // 2^160 - 1
-	return max
+// following 3 functions below are simple helper functions, since we cant do simple arithmatic on [20]byte
+
+func compare(a, b [20]byte) int { // compare returns -1 if a<b, 0 if a==b, 1 if a>b
+	for i := 0; i < 20; i++ {
+		if a[i] < b[i] {
+			return -1
+		} else if a[i] > b[i] {
+			return 1
+		}
+	}
+	return 0
 }
 
-// Helper function to create zero value
-func Zero160BitInt() *big.Int {
-	return big.NewInt(0)
+func addOne(x [20]byte) [20]byte { // addOne returns x+1 (mod 2^160)
+	var out [20]byte
+	carry := byte(1)
+	for i := 19; i >= 0; i-- {
+		sum := uint16(x[i]) + uint16(carry)
+		out[i] = byte(sum & 0xff)
+		carry = byte(sum >> 8)
+	}
+	return out
 }
+
+func midpoint(a, b [20]byte) [20]byte { // midpoint returns floor((a+b)/2)
+	var out [20]byte
+	var carry uint16
+	for i := 19; i >= 0; i-- {
+		sum := uint16(a[i]) + uint16(b[i]) + carry
+		out[i] = byte((sum >> 1) & 0xff) // divide by 2
+		carry = (sum & 1) << 8           // carry remainder to next higher byte
+	}
+	return out
+}
+
+//TODO

@@ -3,12 +3,11 @@ package node
 import (
 	"crypto/rand"
 	"fmt"
-	"math/big"
 	"sync"
 )
 
 type Node struct {
-	NodeID      *big.Int         `json:"node_id"` // 160bit id
+	NodeID      [20]byte         `json:"node_id"` // 160bit id
 	Hostname    string           `json:"hostname"`
 	NodeStorage map[string]Value `json:"node_storage"` // Store Value struct in dictionary
 
@@ -16,18 +15,15 @@ type Node struct {
 }
 
 func NewNode(hostname string) (*Node, error) {
-	// Generate 160-bit random number (20 bytes)
-	randomBytes := make([]byte, 20)
-	_, err := rand.Read(randomBytes)
+	var id [20]byte
+
+	_, err := rand.Read(id[:]) // fills all 160 bits
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate node ID: %w", err)
 	}
 
-	// Convert bytes to big.Int
-	nodeID := new(big.Int).SetBytes(randomBytes)
-
 	return &Node{
-		NodeID:      nodeID,
+		NodeID:      id,
 		Hostname:    hostname,
 		NodeStorage: make(map[string]Value),
 	}, nil
