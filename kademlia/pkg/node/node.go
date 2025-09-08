@@ -7,9 +7,10 @@ import (
 )
 
 type Node struct {
-	NodeID      [20]byte         `json:"node_id"` // 160bit id
-	Hostname    string           `json:"hostname"`
-	NodeStorage map[string]Value `json:"node_storage"` // Store Value struct in dictionary
+	NodeID       [20]byte // 160bit id
+	Hostname     string
+	NodeStorage  map[string]Value // Store Value struct in dictionary
+	RoutingTable RoutingTable
 
 	mu sync.RWMutex
 }
@@ -23,9 +24,10 @@ func NewNode(hostname string) (*Node, error) {
 	}
 
 	return &Node{
-		NodeID:      id,
-		Hostname:    hostname,
-		NodeStorage: make(map[string]Value),
+		NodeID:       id,
+		Hostname:     hostname,
+		NodeStorage:  make(map[string]Value),
+		RoutingTable: NewRoutingTable(),
 	}, nil
 }
 

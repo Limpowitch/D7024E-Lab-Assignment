@@ -5,8 +5,8 @@ import (
 )
 
 type Value struct {
-	Data      []byte    `json:"data"`
-	ExpiresAt time.Time `json:"expires_at"`
+	Data      []byte
+	ExpiresAt time.Time
 }
 
 func NewValue(data []byte, ttl time.Duration) Value {
