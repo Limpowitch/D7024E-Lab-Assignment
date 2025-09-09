@@ -18,5 +18,5 @@ func NewValue(data []byte, ttl time.Duration) (Value, error) {
 
 func (v Value) Expired(now time.Time) bool { // Future implimentation...
 
-	return false // change this
+	return !now.Before(v.ExpiresAt) // this should work for the tests. change if needed//samme
 }
