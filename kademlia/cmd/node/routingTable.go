@@ -49,20 +49,12 @@ func (rt *RoutingTable) AddNode(node *Node) error {
 		return errors.New("cannot add node with identical ID")
 	}
 
-	// Correct bucket index
-	bucketIndex := 159 - msb
-	rt.AddToRtEntry(Contact{ID: node.NodeID, Host: node.Hostname}, bucketIndex)
+	contact, _ := NewContact(*node)
+
+	targetEntry := &rt.BucketList[msb]
+	targetEntry.AddToKBucket(contact)
+
 	return nil
-}
-
-func (rt *RoutingTable) AddToRtEntry(value Contact, rtEntry int) {
-	if rtEntry < 0 || rtEntry >= len(rt.BucketList) {
-		return // or handle error
-	}
-
-	targetEntry := &rt.BucketList[rtEntry] // pointer to bucket
-	targetEntry.AddToKBucket(value)
-
 }
 
 // func (rt *RoutingTable) AddBucketToRT(value Kbucket) { // might be used???
@@ -92,7 +84,7 @@ func (rt *RoutingTable) CalcMostSigBit(RemoteNode *Node) (int, error) {
 			for bit := 7; bit >= 0; bit-- {
 				if (b>>bit)&1 == 1 {
 					// MSB index: 0 is most significant bit, 159 is least
-					return byteIndex*8 + (7 - bit), nil
+					return 159 - byteIndex*8 + (7 - bit), nil
 				}
 			}
 		}

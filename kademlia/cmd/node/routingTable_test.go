@@ -71,10 +71,8 @@ func TestAddNodeToCorrectBucket(t *testing.T) {
 		t.Fatalf("CalcMostSigBit failed: %v", err)
 	}
 
-	bucketIndex := 159 - msb
-
 	// check that we've correctly added nodeB to nodeA
-	kb := nodeA.RoutingTable.BucketList[bucketIndex]
+	kb := nodeA.RoutingTable.BucketList[msb]
 	found := false
 	for _, c := range kb.Contacts {
 		if bytes.Equal(c.ID[:], nodeB.NodeID[:]) {
@@ -83,6 +81,6 @@ func TestAddNodeToCorrectBucket(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Errorf("nodeB not found in expected KBucket %d (MSB %d)", bucketIndex, msb)
+		t.Errorf("nodeB not found in expected KBucket %d (MSB %d)", msb, msb)
 	}
 }
