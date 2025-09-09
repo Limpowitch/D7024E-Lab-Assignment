@@ -23,7 +23,7 @@ func NewNode(hostname string) (*Node, error) {
 		return nil, fmt.Errorf("failed to generate node ID: %w", err)
 	}
 
-	rt, _ := NewRoutingTable()
+	rt, _ := NewRoutingTable(id)
 
 	return &Node{
 		NodeID:       id,
