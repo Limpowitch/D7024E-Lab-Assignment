@@ -1,6 +1,9 @@
 package wire
 
-import "errors"
+import (
+	"crypto/rand"
+	"errors"
+)
 
 // we need messages that travel over udp.
 // each message must carry the rpc id (160bit) so that req. and reply can be correlated
@@ -18,6 +21,8 @@ import "errors"
 const SizeOfID = 20
 
 type RPCID [SizeOfID]byte // follow the same principle as in 'node'
+
+func NewRPCID() (id RPCID) { _, _ = rand.Read(id[:]); return } //useful for tests later
 
 type Envelope struct {
 	ID      RPCID
