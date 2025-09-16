@@ -1,12 +1,13 @@
-package main
+package transport
 
 import (
 	"net"
+	"time"
 
 	"github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/wire"
 )
 
-type Handler func(from *net.UDPAddr)
+type Handler func(from *net.UDPAddr, env wire.Envelope)
 
 type UDPServer struct {
 	pc            net.PacketConn
@@ -15,10 +16,48 @@ type UDPServer struct {
 	down          chan struct{}
 }
 
+func NewUDP(bind string, h Handler) (*UDPServer, error) {
+	pc, err := net.ListenPacket("udp", bind)
+	if err != nil {
+		return nil, err
+	}
+	return &UDPServer{
+		pc:            pc,
+		addressString: pc.LocalAddr().String(),
+		handler:       h,
+		down:          make(chan struct{}),
+	}, nil
+}
+
 func (server *UDPServer) Addr() string { return server.addressString }
 
 // needs envelope?
-func (server *UDPServer) Start() {}
+func (server *UDPServer) Start() {
+	go func() {
+		buf := make([]byte, 2048)
+		for {
+			_ = server.pc.SetReadDeadline(time.Now().Add(750 * time.Millisecond))
+			n, from, err := server.pc.ReadFrom(buf)
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				select {
+				case <-server.down:
+					return
+				default:
+					continue
+				}
+			}
+			if err != nil {
+				return
+			}
+			//env, err := wire.Unmarshal(buf[:n])
+
+			env, err := wire.Unmarshal(buf[:n])
+			if err == nil && server.handler != nil {
+				server.handler(from.(*net.UDPAddr), env)
+			}
+		}
+	}()
+}
 
 // subject to change depending on the payload envelope (needed?) //samme
 func (server *UDPServer) Send(target string, env wire.Envelope) error {
