@@ -7,89 +7,146 @@ type RoutingTable struct {
 	BucketList []Kbucket
 }
 
-func NewRoutingTable(SelfId [20]byte) (RoutingTable, error) {
-	const Bits = 160
+func NewRoutingTable(SelfId, lower, upper [20]byte) (RoutingTable, error) {
 	const KBucketCapacity = 20
 
 	rt := RoutingTable{
 		SelfID:     SelfId,
-		BucketList: make([]Kbucket, Bits),
+		BucketList: make([]Kbucket, 1),
 	}
 
-	var zeroID [20]byte
-
-	for i := 0; i < Bits; i++ {
-		// Compute lower limit as 0
-		lower := zeroID
-
-		// Compute upper limit by setting the (i)th bit to 1
-		var upper [20]byte
-		byteIndex := i / 8
-		bitIndex := 7 - (i % 8) // MSB-first
-		upper[byteIndex] = 1 << bitIndex
-
-		kb, err := NewKBucket(KBucketCapacity, lower, upper, []Contact{})
-		if err != nil {
-			return RoutingTable{}, errors.New("failed to create kbucket")
-		}
-
-		rt.BucketList[i] = kb
+	kb, err := NewKBucket(KBucketCapacity, lower, upper, nil)
+	if err != nil {
+		return RoutingTable{}, errors.New("failed to create initial kbucket")
 	}
 
+	rt.BucketList[0] = kb
 	return rt, nil
 }
 
-func (rt *RoutingTable) AddNode(node *Node) error {
-	msb, err := rt.CalcMostSigBit(node)
-	if err != nil {
-		return err
+// helper function for AddBucket
+// less160 returns true if a < b (big-endian 160-bit compare).
+func less160(a, b [20]byte) bool {
+	for i := 0; i < 20; i++ {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return false
+}
+
+func (rt *RoutingTable) AddBucket(kb Kbucket) error {
+	lower := kb.LowerLimit
+	upper := kb.UpperLimit
+
+	if len(rt.BucketList) == 0 {
+		rt.BucketList = append(rt.BucketList, kb)
+		return nil
 	}
 
-	if msb < 0 {
-		return errors.New("cannot add node with identical ID")
+	insertAt := len(rt.BucketList)
+	for i := 0; i < len(rt.BucketList); i++ {
+		b := rt.BucketList[i]
+
+		if b.LowerLimit == lower && b.UpperLimit == upper {
+			return errors.New("kbucket already exists in routing table")
+		}
+
+		// find first bucket whose lower >= new.lower -> insert before it
+		if !less160(b.LowerLimit, lower) {
+			insertAt = i
+			break
+		}
 	}
 
-	contact, _ := NewContact(*node)
+	rt.BucketList = append(rt.BucketList, Kbucket{})
+	copy(rt.BucketList[insertAt+1:], rt.BucketList[insertAt:])
+	rt.BucketList[insertAt] = kb
+	return nil
+}
 
-	targetEntry := &rt.BucketList[msb]
-	targetEntry.AddToKBucket(contact)
+func (rt *RoutingTable) RemoveBucket(kb Kbucket) error {
+	if len(rt.BucketList) == 0 {
+		return errors.New("routing table contains no kbuckets")
+	}
+
+	idx := -1
+	for i := range rt.BucketList {
+		b := rt.BucketList[i]
+		if b.LowerLimit == kb.LowerLimit && b.UpperLimit == kb.UpperLimit {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return errors.New("kbucket not found in routing table")
+	}
+
+	copy(rt.BucketList[idx:], rt.BucketList[idx+1:])
+	rt.BucketList = rt.BucketList[:len(rt.BucketList)-1]
+	return nil
+}
+
+func (rt *RoutingTable) SplitBucket(originBucket Kbucket) error {
+
+	mid := midpoint(originBucket.LowerLimit, originBucket.UpperLimit)
+
+	kb1Lower := originBucket.LowerLimit
+	kb1Upper := mid
+	kb2Lower := addOne(mid)
+	kb2Upper := originBucket.UpperLimit
+
+	var kb1Contacts, kb2Contacts []Contact
+	for _, c := range originBucket.Contacts {
+		if compare(c.ID, kb1Lower) >= 0 && compare(c.ID, kb1Upper) <= 0 {
+			kb1Contacts = append(kb1Contacts, c)
+		} else {
+			kb2Contacts = append(kb2Contacts, c)
+		}
+	}
+
+	kb1, _ := NewKBucket(originBucket.Capacity, kb1Lower, kb1Upper, kb1Contacts) // Bucket1 = [originbucket.lower, mid]
+	kb2, _ := NewKBucket(originBucket.Capacity, kb2Lower, kb2Upper, kb2Contacts) // Bucket2 = [mid + 1, originbucket.upper]
+
+	rt.RemoveBucket(originBucket)
+
+	rt.AddBucket(kb1)
+	rt.AddBucket(kb2)
 
 	return nil
 }
 
-// func (rt *RoutingTable) AddBucketToRT(value Kbucket) { // might be used???
-// 	rt.BucketList = append(rt.BucketList, value)
-// }
+// following 3 functions below are simple helper functions, since we cant do simple arithmatic on [20]byte
 
-// func (rt *RoutingTable) DeleteBucketFromRT(value Kbucket) { // Also might be used???
-// 	for i, v := range rt.BucketList {
-// 		if v.LowerLimit == value.LowerLimit && v.UpperLimit == value.UpperLimit {
-// 			rt.BucketList = append(rt.BucketList[:i], rt.BucketList[i+1:]...)
-// 			return
-// 		}
-// 	}
-// }
-
-func (rt *RoutingTable) CalcMostSigBit(RemoteNode *Node) (int, error) {
-	var distance [20]byte
+func compare(a, b [20]byte) int { // compare returns -1 if a<b, 0 if a==b, 1 if a>b
 	for i := 0; i < 20; i++ {
-		distance[i] = rt.SelfID[i] ^ RemoteNode.NodeID[i]
-	}
-
-	// Iterate over each byte from the most significant byte
-	for byteIndex := 0; byteIndex < 20; byteIndex++ {
-		b := distance[byteIndex]
-		if b != 0 {
-			// Find the most significant bit in this byte
-			for bit := 7; bit >= 0; bit-- {
-				if (b>>bit)&1 == 1 {
-					// MSB index: 0 is most significant bit, 159 is least
-					return 159 - byteIndex*8 + (7 - bit), nil
-				}
-			}
+		if a[i] < b[i] {
+			return -1
+		} else if a[i] > b[i] {
+			return 1
 		}
 	}
+	return 0
+}
 
-	// IDs are identical
-	return -1, nil
+func addOne(x [20]byte) [20]byte { // addOne returns x+1 (mod 2^160)
+	var out [20]byte
+	carry := byte(1)
+	for i := 19; i >= 0; i-- {
+		sum := uint16(x[i]) + uint16(carry)
+		out[i] = byte(sum & 0xff)
+		carry = byte(sum >> 8)
+	}
+	return out
+}
+
+func midpoint(a, b [20]byte) [20]byte { // midpoint returns floor((a+b)/2)
+	var out [20]byte
+	var carry uint16
+	for i := 19; i >= 0; i-- {
+		sum := uint16(a[i]) + uint16(b[i]) + carry
+		out[i] = byte((sum >> 1) & 0xff) // divide by 2
+		carry = (sum & 1) << 8           // carry remainder to next higher byte
+	}
+	return out
 }
