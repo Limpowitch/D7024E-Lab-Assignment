@@ -31,6 +31,9 @@ func NewUDP(bind string, h Handler) (*UDPServer, error) {
 
 func (server *UDPServer) Addr() string { return server.addressString }
 
+// NEW: så vi kan sätta/ändra handler efter NewUDP()
+func (server *UDPServer) SetHandler(h Handler) { server.handler = h }
+
 // needs envelope?
 func (server *UDPServer) Start() {
 	go func() {
@@ -75,8 +78,27 @@ func (server *UDPServer) Reply(target *net.UDPAddr, env wire.Envelope) error {
 	return err
 }
 
-func (server *UDPServer) Close() error {
-	close(server.down)
+func (server *UDPServer) Request(target string, env wire.Envelope, timeout time.Duration) (wire.Envelope, error) {
+	conn, err := net.Dial("udp", target)
+	if err != nil {
+		return wire.Envelope{}, err
+	}
+	defer conn.Close()
 
-	return server.pc.Close()
+	if _, err := conn.Write(env.Marshal()); err != nil {
+		return wire.Envelope{}, err
+	}
+
+	_ = conn.SetReadDeadline(time.Now().Add(timeout))
+
+	buf := make([]byte, 2048)
+	n, err := conn.Read(buf)
+	if err != nil {
+		return wire.Envelope{}, err
+	}
+	reply, err := wire.Unmarshal(buf[:n])
+	if err != nil {
+		return wire.Envelope{}, err
+	}
+	return reply, nil
 }
