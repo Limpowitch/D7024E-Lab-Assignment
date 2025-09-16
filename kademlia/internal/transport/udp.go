@@ -70,6 +70,15 @@ func (server *UDPServer) Send(target string, env wire.Envelope) error {
 	return err
 }
 
+func (server *UDPServer) SendFromListener(to string, env wire.Envelope) error {
+	raddr, err := net.ResolveUDPAddr("udp", to)
+	if err != nil {
+		return err
+	}
+	_, err = server.pc.WriteTo(env.Marshal(), raddr)
+	return err
+}
+
 func (server *UDPServer) Reply(target *net.UDPAddr, env wire.Envelope) error {
 	_, err := server.pc.WriteTo(env.Marshal(), target) // change payload to envelope once struct and functinos are implemented
 	return err
