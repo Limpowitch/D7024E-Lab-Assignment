@@ -3,18 +3,18 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"sync"
 
-	"github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/cmd/node"
 	"github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/internal/transport"
 	"github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/wire"
 )
 
 var ErrTimeout = errors.New("rpc timeout")
 
-type FindNodeHandler func(target node.NodeID) []node.Contact
+type NodeID = [20]byte // local alias; avoids importing node
+type FindNodeHandler func(target NodeID) []byte
+type SeenHook func(addr string, peerID [20]byte)
 
 type Service struct {
 	udp *transport.UDPServer
@@ -23,8 +23,8 @@ type Service struct {
 	mu      sync.Mutex
 	waiters map[wire.RPCID]chan wire.Envelope
 
-	// might not be needed but kinda slick to have?????
 	SelfID     [20]byte
+	OnSeen     SeenHook //just call this when we learn another nodes id
 	SelfAddr   string
 	OnFindNode FindNodeHandler
 }
@@ -47,11 +47,12 @@ func (s *Service) Start()           { s.udp.Start() }
 func (s *Service) Addr() string     { return s.udp.Addr() }
 func (s *Service) Close() error     { return s.udp.Close() }
 func (s *Service) DialAddr() string { return s.udp.Addr() }
+
 func (service *Service) Ping(ctx context.Context, to string) error {
 	request := wire.Envelope{
 		ID:      wire.NewRPCID(),
 		Type:    "PING",
-		Payload: nil, // nil for ping should be reasonable?
+		Payload: service.SelfID[:], // this is [20]byte size
 	}
 
 	_, err := service.sendAndWait(ctx, to, request)
@@ -67,7 +68,7 @@ func (service *Service) sendAndWait(ctx context.Context, to string, env wire.Env
 	service.waiters[env.ID] = ch
 	service.mu.Unlock()
 
-	// send
+	// send from listening socket (source port is the server port (us))
 	if err := service.udp.SendFromListener(to, env); err != nil {
 		service.mu.Lock()
 		delete(service.waiters, env.ID)
@@ -75,7 +76,7 @@ func (service *Service) sendAndWait(ctx context.Context, to string, env wire.Env
 		return wire.Envelope{}, err
 	}
 
-	// await
+	// await (just block on waiter channel or context timeout if that can even happen)
 	select {
 	case resp := <-ch:
 		return resp, nil
@@ -87,30 +88,35 @@ func (service *Service) sendAndWait(ctx context.Context, to string, env wire.Env
 	}
 }
 
-func (service *Service) FindNode(ctx context.Context, to string, target node.NodeID) ([]node.Contact, error) {
-	request := wire.Envelope{
+func (s *Service) FindNode(ctx context.Context, to string, target NodeID) ([]byte, error) {
+	req := wire.Envelope{
 		ID:      wire.NewRPCID(),
 		Type:    "FIND_NODE",
-		Payload: target[:],
+		Payload: target[:], // 20B
 	}
-	response, err := service.sendAndWait(ctx, to, request)
+	resp, err := s.sendAndWait(ctx, to, req)
 	if err != nil {
 		return nil, err
 	}
-	if response.Type != "FIND_NODE_RESP" {
-		return nil, ErrTimeout
+	if resp.Type != "FIND_NODE_RESP" {
+		return nil, errors.New("unexpected response type: " + resp.Type)
 	}
-	return node.UnmarshalContactList(response.Payload)
+	return resp.Payload, nil // raw bytes; node layer will decode
 }
 
 func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
-	fmt.Println("onPacket:", env.Type, "from", from)
+	//fmt.Println("onPacket:", env.Type, "from", from)
 
 	switch env.Type {
 	case "PING":
-		// immediately reply: PONG (we should reuse same ID?)
-		pong := wire.Envelope{ID: env.ID, Type: "PONG", Payload: nil}
-		_ = service.udp.Reply(from, pong)
+		var pid [20]byte
+		if len(env.Payload) >= 20 {
+			copy(pid[:], env.Payload[:20])
+			if service.OnSeen != nil {
+				service.OnSeen(from.String(), pid)
+			}
+		}
+		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "PONG"})
 
 	case "PONG":
 		// wake up waiters
@@ -121,19 +127,18 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		}
 		service.mu.Unlock()
 	case "FIND_NODE":
-		var target node.NodeID
-		if len(env.Payload) >= node.IDBytes {
-			copy(target[:], env.Payload[:node.IDBytes])
+		var target NodeID
+		if len(env.Payload) >= 20 {
+			copy(target[:], env.Payload[:20])
 		}
-		var contacts []node.Contact
+		var payload []byte
 		if service.OnFindNode != nil {
-			contacts = service.OnFindNode(target)
+			payload = service.OnFindNode(target) // already encoded contact list
 		}
-		pl := node.MarshalContactList(contacts)
 		_ = service.udp.Reply(from, wire.Envelope{
 			ID:      env.ID,
 			Type:    "FIND_NODE_RESP",
-			Payload: pl,
+			Payload: payload,
 		})
 	case "FIND_NODE_RESP":
 		// exactly as pong. maybe create function which both can call upon?
