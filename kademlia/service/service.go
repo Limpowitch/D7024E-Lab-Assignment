@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"log"
 	"net"
 	"sync"
 
@@ -109,6 +110,7 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 
 	switch env.Type {
 	case "PING":
+		log.Printf("[service] PING from %s id=%x", from.String(), env.ID[:4])
 		var pid [20]byte
 		if len(env.Payload) >= 20 {
 			copy(pid[:], env.Payload[:20])
@@ -120,6 +122,7 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 
 	case "PONG":
 		// wake up waiters
+		log.Printf("[service] PONG from %s id=%x", from.String(), env.ID[:4])
 		service.mu.Lock()
 		if ch, ok := service.waiters[env.ID]; ok {
 			delete(service.waiters, env.ID)
@@ -127,6 +130,7 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		}
 		service.mu.Unlock()
 	case "FIND_NODE":
+		log.Printf("[service] FIND_NODE from %s id=%x", from.String(), env.ID[:4])
 		var target NodeID
 		if len(env.Payload) >= 20 {
 			copy(target[:], env.Payload[:20])
@@ -141,6 +145,7 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 			Payload: payload,
 		})
 	case "FIND_NODE_RESP":
+		log.Printf("[service] FIND_NODE_RESP from %s id=%x", from.String(), env.ID[:4])
 		// exactly as pong. maybe create function which both can call upon?
 		service.mu.Lock()
 		if ch, ok := service.waiters[env.ID]; ok {
