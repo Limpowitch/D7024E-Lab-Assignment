@@ -10,7 +10,7 @@ import (
 	"github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/service"
 )
 
-const K = 20 // bucket size / #contacts to return; keep consistent across the project
+const K = 20 // bucket size
 
 type Node struct {
 	NodeID       [20]byte
@@ -54,17 +54,17 @@ func NewNode(bind string) (*Node, error) {
 		Svc:          svc,
 	}
 
-	// When we learn a peer’s ID (from PING payload), update our routing table.
+	// when we learn another nodes id (from ping i guess?) we update our routing table. done here initially
 	n.Svc.OnSeen = func(addr string, peerID [20]byte) {
 		if !isZero(peerID) {
 			n.RoutingTable.Update(Contact{ID: peerID, Addr: addr})
 		}
 	}
 
-	// When asked FIND_NODE(target), reply with k closest from our RT.
+	// when asked FIND_NODE we reply with k closest from our own routing table
 	n.Svc.OnFindNode = func(target [20]byte) []byte {
 		cs := n.RoutingTable.Closest(target, K)
-		return MarshalContactList(cs) // your node-side encoder
+		return MarshalContactList(cs) // encode--pls look at this later
 	}
 
 	return n, nil
@@ -85,7 +85,7 @@ func (n *Node) Close() error { return n.Svc.Close() }
 
 func isZero(id [20]byte) bool { var z [20]byte; return id == z }
 
-// --- convenience methods the CLI / higher layers can use ---
+// --- methods CLI / higher layers could use ---
 
 func (n *Node) PingPeer(targetAddr string) error {
 	// service.Ping sends our NodeID in the payload and waits for PONG
@@ -94,7 +94,7 @@ func (n *Node) PingPeer(targetAddr string) error {
 	return n.Svc.Ping(ctx.Ctx, targetAddr)
 }
 
-// Storage helpers you already had (renamed for brevity)
+// storag helpers
 func (n *Node) Put(key string, value Value) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -107,7 +107,7 @@ func (n *Node) Get(key string) (Value, bool) {
 	return v, ok
 }
 
-// tiny helper for timeouts (keeps service calls uniform)
+// idk if we need this but i'll leave it for now
 type cancelCtx struct {
 	Ctx    context.Context
 	Cancel context.CancelFunc
