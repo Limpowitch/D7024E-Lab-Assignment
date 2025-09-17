@@ -40,22 +40,22 @@ type RPC struct {
 
 // ==== Hjälpfunktioner ====
 
-func NewRPCID() (id [20]byte) {
+func NewRPCID() (id [20]byte) { // slumpmässigt RPC-ID
 	_, _ = rand.Read(id[:])
 	return
 }
 
-func SHA1Key(b []byte) (k [20]byte) {
+func SHA1Key(b []byte) (k [20]byte) { // SHA-1 hash av godtycklig data
 	sum := sha1.Sum(b)
 	copy(k[:], sum[:])
 	return
 }
 
-func KeyToHex(k [20]byte) string {
+func KeyToHex(k [20]byte) string { // hex-sträng av nyckel
 	return hex.EncodeToString(k[:])
 }
 
-func HexToKey(s string) (k [20]byte, ok bool) {
+func HexToKey(s string) (k [20]byte, ok bool) { // nyckel från hex-sträng
 	b, err := hex.DecodeString(s)
 	if err != nil || len(b) != 20 {
 		return k, false

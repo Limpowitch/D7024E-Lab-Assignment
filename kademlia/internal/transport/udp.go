@@ -102,3 +102,8 @@ func (server *UDPServer) Request(target string, env wire.Envelope, timeout time.
 	}
 	return reply, nil
 }
+
+func (server *UDPServer) Close() error {
+	close(server.down)
+	return server.pc.Close()
+}

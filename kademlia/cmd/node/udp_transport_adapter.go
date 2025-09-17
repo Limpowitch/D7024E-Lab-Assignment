@@ -19,18 +19,17 @@ func fromWireID(w wire.RPCID) (id [20]byte) {
 	copy(id[:], w[:])
 	return
 }
-
 func (a *UDPTransportAdapter) Request(addr string, req *RPC, timeout time.Duration) (*RPC, error) {
 	env := wire.Envelope{ID: toWireID(req.RPCID)}
+
 	switch req.Type {
 	case MSG_STORE:
 		env.Type = wire.TypeStore
 		env.Payload = wire.PackStore(req.FromID, req.Key, req.Value)
+
 	case MSG_FIND_VALUE:
-		env.Type = wire.TypeFindValueReply
-		env.Payload = wire.PackFindValueReplyValue(req.FromID, req.Key[:])
-	default:
-		// hantera fler typer senare om ni vill
+		env.Type = wire.TypeFindValue                         // <-- REQUEST, inte Reply
+		env.Payload = wire.PackFindValue(req.FromID, req.Key) // (fromID, key)
 	}
 
 	reply, err := a.Srv.Request(addr, env, timeout)
@@ -61,5 +60,4 @@ func (a *UDPTransportAdapter) Request(addr string, req *RPC, timeout time.Durati
 		}
 	}
 	return out, nil
-
 }

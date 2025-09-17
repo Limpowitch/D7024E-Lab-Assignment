@@ -57,10 +57,11 @@ func Unmarshal(b []byte) (Envelope, error) {
 	return Envelope{ID: id, Type: typ, Payload: pl}, nil
 }
 
-const (
+const ( // Olika typer av meddelanden
 	TypeStore          = "STORE"
 	TypeStoreAck       = "STORE_ACK"
 	TypeFindNode       = "FIND_NODE"
+	TypeFindValue      = "FIND_VALUE"
 	TypeFindValueReply = "FIND_VALUE_REPLY"
 )
 
@@ -69,8 +70,7 @@ type Contact struct {
 	Address string
 }
 
-//Store
-
+// Store
 func PackStore(fromID, key [20]byte, value []byte) []byte {
 	out := make([]byte, 0, 20+20+len(value))
 	out = append(out, fromID[:]...)
@@ -90,12 +90,11 @@ func UnpackStore(pl []byte) (fromID, key [20]byte, value []byte, err error) {
 }
 
 // Ack
-func PackStoreAck(fromID, key [20]byte) []byte {
+func PackStoreAck(fromID, _ [20]byte) []byte {
 	out := make([]byte, 0, 20)
-	copy(out, fromID[:])
+	out = append(out, fromID[:]...)
 	return out
 }
-
 func UnpackStoreAck(pl []byte) (fromID, key [20]byte, err error) {
 	if len(pl) < 20 {
 		return fromID, key, errors.New("short store ack")
@@ -106,9 +105,9 @@ func UnpackStoreAck(pl []byte) (fromID, key [20]byte, err error) {
 
 // FindNode
 func PackFindNode(fromID, key [20]byte) []byte {
-	out := make([]byte, 0, 20+20)
-	copy(out[:20], fromID[:])
-	copy(out[20:40], key[:])
+	out := make([]byte, 0, 40)
+	out = append(out, fromID[:]...)
+	out = append(out, key[:]...)
 	return out
 }
 
@@ -130,6 +129,7 @@ func PackFindValueReplyValue(fromID [20]byte, value []byte) []byte {
 	return out
 }
 
+// PackFindValueReplyContacts packar ett svar med kontakter och returnerar byte slice
 func PackFindValueReplyContacts(fromID [20]byte, contacts []Contact) []byte {
 	buf := bytes.NewBuffer(make([]byte, 0, 32))
 	buf.Write(fromID[:])
@@ -189,3 +189,6 @@ func UnpackFindValueReply(p []byte) (fromID [20]byte, hasValue bool, value []byt
 	}
 	return
 }
+
+func PackFindValue(fromID, key [20]byte) []byte                   { return PackFindNode(fromID, key) }
+func UnpackFindValue(pl []byte) (fromID, key [20]byte, err error) { return UnpackFindNode(pl) }

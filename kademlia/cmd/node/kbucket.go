@@ -5,8 +5,8 @@ import (
 )
 
 type Contact struct {
-	ID   [20]byte
-	Host string
+	ID      [20]byte
+	Address string
 	//LastSeen time.Time		//commented out for now
 }
 type Kbucket struct {
@@ -19,8 +19,8 @@ type Kbucket struct {
 
 func NewContact(node Node) (Contact, error) {
 	return Contact{
-		ID:   node.NodeID,
-		Host: node.Hostname,
+		ID:      node.NodeID,
+		Address: node.Hostname,
 	}, nil
 }
 
