@@ -1,24 +1,152 @@
 package node
 
+import "errors"
+
 type RoutingTable struct {
+	SelfID     [20]byte
 	BucketList []Kbucket
 }
 
-func NewRoutingTable() (RoutingTable, error) {
-	return RoutingTable{
-		BucketList: make([]Kbucket, 0),
-	}, nil
+func NewRoutingTable(SelfId, lower, upper [20]byte) (RoutingTable, error) {
+	const KBucketCapacity = 20
+
+	rt := RoutingTable{
+		SelfID:     SelfId,
+		BucketList: make([]Kbucket, 1),
+	}
+
+	kb, err := NewKBucket(KBucketCapacity, lower, upper, nil)
+	if err != nil {
+		return RoutingTable{}, errors.New("failed to create initial kbucket")
+	}
+
+	rt.BucketList[0] = kb
+	return rt, nil
 }
 
-func (rt *RoutingTable) AddToRT(value Kbucket) {
-	rt.BucketList = append(rt.BucketList, value)
-}
-
-func (rt *RoutingTable) DeleteFromRT(value Kbucket) {
-	for i, v := range rt.BucketList {
-		if v.LowerLimit == value.LowerLimit && v.UpperLimit == value.UpperLimit {
-			rt.BucketList = append(rt.BucketList[:i], rt.BucketList[i+1:]...)
-			return
+// helper function for AddBucket
+// less160 returns true if a < b (big-endian 160-bit compare).
+func less160(a, b [20]byte) bool {
+	for i := 0; i < 20; i++ {
+		if a[i] != b[i] {
+			return a[i] < b[i]
 		}
 	}
+	return false
+}
+
+func (rt *RoutingTable) AddBucket(kb Kbucket) error {
+	lower := kb.LowerLimit
+	upper := kb.UpperLimit
+
+	if len(rt.BucketList) == 0 {
+		rt.BucketList = append(rt.BucketList, kb)
+		return nil
+	}
+
+	insertAt := len(rt.BucketList)
+	for i := 0; i < len(rt.BucketList); i++ {
+		b := rt.BucketList[i]
+
+		if b.LowerLimit == lower && b.UpperLimit == upper {
+			return errors.New("kbucket already exists in routing table")
+		}
+
+		// find first bucket whose lower >= new.lower -> insert before it
+		if !less160(b.LowerLimit, lower) {
+			insertAt = i
+			break
+		}
+	}
+
+	rt.BucketList = append(rt.BucketList, Kbucket{})
+	copy(rt.BucketList[insertAt+1:], rt.BucketList[insertAt:])
+	rt.BucketList[insertAt] = kb
+	return nil
+}
+
+func (rt *RoutingTable) RemoveBucket(kb Kbucket) error {
+	if len(rt.BucketList) == 0 {
+		return errors.New("routing table contains no kbuckets")
+	}
+
+	idx := -1
+	for i := range rt.BucketList {
+		b := rt.BucketList[i]
+		if b.LowerLimit == kb.LowerLimit && b.UpperLimit == kb.UpperLimit {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return errors.New("kbucket not found in routing table")
+	}
+
+	copy(rt.BucketList[idx:], rt.BucketList[idx+1:])
+	rt.BucketList = rt.BucketList[:len(rt.BucketList)-1]
+	return nil
+}
+
+func (rt *RoutingTable) SplitBucket(originBucket Kbucket) error {
+
+	mid := midpoint(originBucket.LowerLimit, originBucket.UpperLimit)
+
+	kb1Lower := originBucket.LowerLimit
+	kb1Upper := mid
+	kb2Lower := addOne(mid)
+	kb2Upper := originBucket.UpperLimit
+
+	var kb1Contacts, kb2Contacts []Contact
+	for _, c := range originBucket.Contacts {
+		if compare(c.ID, kb1Lower) >= 0 && compare(c.ID, kb1Upper) <= 0 {
+			kb1Contacts = append(kb1Contacts, c)
+		} else {
+			kb2Contacts = append(kb2Contacts, c)
+		}
+	}
+
+	kb1, _ := NewKBucket(originBucket.Capacity, kb1Lower, kb1Upper, kb1Contacts) // Bucket1 = [originbucket.lower, mid]
+	kb2, _ := NewKBucket(originBucket.Capacity, kb2Lower, kb2Upper, kb2Contacts) // Bucket2 = [mid + 1, originbucket.upper]
+
+	rt.RemoveBucket(originBucket)
+
+	rt.AddBucket(kb1)
+	rt.AddBucket(kb2)
+
+	return nil
+}
+
+// following 3 functions below are simple helper functions, since we cant do simple arithmatic on [20]byte
+
+func compare(a, b [20]byte) int { // compare returns -1 if a<b, 0 if a==b, 1 if a>b
+	for i := 0; i < 20; i++ {
+		if a[i] < b[i] {
+			return -1
+		} else if a[i] > b[i] {
+			return 1
+		}
+	}
+	return 0
+}
+
+func addOne(x [20]byte) [20]byte { // addOne returns x+1 (mod 2^160)
+	var out [20]byte
+	carry := byte(1)
+	for i := 19; i >= 0; i-- {
+		sum := uint16(x[i]) + uint16(carry)
+		out[i] = byte(sum & 0xff)
+		carry = byte(sum >> 8)
+	}
+	return out
+}
+
+func midpoint(a, b [20]byte) [20]byte { // midpoint returns floor((a+b)/2)
+	var out [20]byte
+	var carry uint16
+	for i := 19; i >= 0; i-- {
+		sum := uint16(a[i]) + uint16(b[i]) + carry
+		out[i] = byte((sum >> 1) & 0xff) // divide by 2
+		carry = (sum & 1) << 8           // carry remainder to next higher byte
+	}
+	return out
 }
