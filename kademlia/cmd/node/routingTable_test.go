@@ -1,4 +1,4 @@
-package main
+package node
 
 import (
 	"testing"
@@ -23,7 +23,7 @@ func TestNewRoutingTable(t *testing.T) {
 		t.Fatalf("expected no error at NewNode creation, got %v", err)
 	}
 
-	contact1, err := NewContact(*node)
+	contact1 := NewContact(node.NodeID, "localhost")
 	if err != nil {
 		t.Fatalf("expected no error at NewContact creation, got %v", err)
 	}

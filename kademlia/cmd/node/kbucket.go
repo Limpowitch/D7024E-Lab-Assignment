@@ -1,27 +1,15 @@
-package main
+package node
 
 import (
 	"sync"
 )
 
-type Contact struct {
-	ID   [20]byte
-	Host string
-	//LastSeen time.Time		//commented out for now
-}
 type Kbucket struct {
 	Capacity   int
 	LowerLimit [20]byte
 	UpperLimit [20]byte
 	Contacts   []Contact
 	mu         sync.RWMutex
-}
-
-func NewContact(node Node) (Contact, error) {
-	return Contact{
-		ID:   node.NodeID,
-		Host: node.Hostname,
-	}, nil
 }
 
 func NewKBucket(k int, lower, upper [20]byte, collection []Contact) (Kbucket, error) {

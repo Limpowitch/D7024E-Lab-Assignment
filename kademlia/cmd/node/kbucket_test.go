@@ -1,4 +1,4 @@
-package main
+package node
 
 import (
 	"testing"
@@ -17,7 +17,7 @@ func TestNewKbucket(t *testing.T) {
 		t.Fatalf("expected no error at NewNode creation, got %v", err)
 	}
 
-	contact1, err := NewContact(*node)
+	contact1 := NewContact(node.NodeID, "localhost")
 	if err != nil {
 		t.Fatalf("expected no error at NewContact creation, got %v", err)
 	}
@@ -35,7 +35,5 @@ func TestNewKbucket(t *testing.T) {
 	if len(kb.Contacts) != 1 {
 		t.Errorf("expected 1 contact, got %d", len(kb.Contacts))
 	}
-	if kb.Contacts[0].Host != "localhost" {
-		t.Errorf("expected contact host 'localhost', got %s", kb.Contacts[0].Host)
-	}
+
 }

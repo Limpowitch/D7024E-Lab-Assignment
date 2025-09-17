@@ -1,5 +1,5 @@
 // cmd/node/main.go
-package main
+package node
 
 import (
 	"flag"
