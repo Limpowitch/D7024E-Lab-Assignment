@@ -1,10 +1,14 @@
 package node
 
-import "errors"
+import (
+	"errors"
+	"sync"
+)
 
 type RoutingTable struct {
 	SelfID     [20]byte
-	BucketList []Kbucket
+	BucketList []*Kbucket
+	mu         sync.RWMutex
 }
 
 func NewRoutingTable(SelfId, lower, upper [20]byte) (RoutingTable, error) {
@@ -12,7 +16,7 @@ func NewRoutingTable(SelfId, lower, upper [20]byte) (RoutingTable, error) {
 
 	rt := RoutingTable{
 		SelfID:     SelfId,
-		BucketList: make([]Kbucket, 1),
+		BucketList: make([]*Kbucket, 1),
 	}
 
 	kb, err := NewKBucket(KBucketCapacity, lower, upper, nil)
@@ -20,22 +24,12 @@ func NewRoutingTable(SelfId, lower, upper [20]byte) (RoutingTable, error) {
 		return RoutingTable{}, errors.New("failed to create initial kbucket")
 	}
 
-	rt.BucketList[0] = kb
+	rt.BucketList[0] = &kb
 	return rt, nil
 }
 
-// helper function for AddBucket
-// less160 returns true if a < b (big-endian 160-bit compare).
-func less160(a, b [20]byte) bool {
-	for i := 0; i < 20; i++ {
-		if a[i] != b[i] {
-			return a[i] < b[i]
-		}
-	}
-	return false
-}
+func (rt *RoutingTable) addBucketLocked(kb *Kbucket) error {
 
-func (rt *RoutingTable) AddBucket(kb Kbucket) error {
 	lower := kb.LowerLimit
 	upper := kb.UpperLimit
 
@@ -59,13 +53,14 @@ func (rt *RoutingTable) AddBucket(kb Kbucket) error {
 		}
 	}
 
-	rt.BucketList = append(rt.BucketList, Kbucket{})
+	rt.BucketList = append(rt.BucketList, &Kbucket{})
 	copy(rt.BucketList[insertAt+1:], rt.BucketList[insertAt:])
 	rt.BucketList[insertAt] = kb
 	return nil
 }
 
-func (rt *RoutingTable) RemoveBucket(kb Kbucket) error {
+func (rt *RoutingTable) removeBucketLocked(kb *Kbucket) error {
+
 	if len(rt.BucketList) == 0 {
 		return errors.New("routing table contains no kbuckets")
 	}
@@ -87,7 +82,21 @@ func (rt *RoutingTable) RemoveBucket(kb Kbucket) error {
 	return nil
 }
 
-func (rt *RoutingTable) SplitBucket(originBucket Kbucket) error {
+// call everytime we succeed with RPC. if contact exist, move to tail. if bucket has room, append. bucket full? drop it or remove head. add LRU logic perhaps?
+func (rt *RoutingTable) Update(c Contact) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	i := rt.bucketIndexFor(c.ID)
+	if i < 0 {
+		return
+	}
+	rt.BucketList[i].Upsert(c)
+}
+
+func (rt *RoutingTable) SplitBucket(originBucket *Kbucket) error {
+
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
 
 	mid := midpoint(originBucket.LowerLimit, originBucket.UpperLimit)
 
@@ -108,10 +117,10 @@ func (rt *RoutingTable) SplitBucket(originBucket Kbucket) error {
 	kb1, _ := NewKBucket(originBucket.Capacity, kb1Lower, kb1Upper, kb1Contacts) // Bucket1 = [originbucket.lower, mid]
 	kb2, _ := NewKBucket(originBucket.Capacity, kb2Lower, kb2Upper, kb2Contacts) // Bucket2 = [mid + 1, originbucket.upper]
 
-	rt.RemoveBucket(originBucket)
+	rt.removeBucketLocked(originBucket)
 
-	rt.AddBucket(kb1)
-	rt.AddBucket(kb2)
+	rt.addBucketLocked(&kb1)
+	rt.addBucketLocked(&kb2)
 
 	return nil
 }
@@ -149,4 +158,14 @@ func midpoint(a, b [20]byte) [20]byte { // midpoint returns floor((a+b)/2)
 		carry = (sum & 1) << 8           // carry remainder to next higher byte
 	}
 	return out
+}
+
+func (rt *RoutingTable) bucketIndexFor(id [20]byte) int {
+	for i := range rt.BucketList {
+		b := rt.BucketList[i]
+		if compare(id, b.LowerLimit) >= 0 && compare(id, b.UpperLimit) <= 0 {
+			return i
+		}
+	}
+	return -1
 }

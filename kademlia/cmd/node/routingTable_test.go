@@ -62,7 +62,7 @@ func TestRoutingTable_AddBucket_SortedInsertAndDuplicate(t *testing.T) {
 	}
 
 	// Remove the full-range bucket so we can test non-overlapping inserts cleanly
-	if err := rt.RemoveBucket(rt.BucketList[0]); err != nil {
+	if err := rt.removeBucketLocked(rt.BucketList[0]); err != nil {
 		t.Fatalf("RemoveBucket (initial) failed: %v", err)
 	}
 	if len(rt.BucketList) != 0 {
@@ -75,13 +75,13 @@ func TestRoutingTable_AddBucket_SortedInsertAndDuplicate(t *testing.T) {
 	kbC, _ := NewKBucket(20, idWithFirstByte(0x40), upperWithFirstByte(0x7F), nil) // [0x40.., 0x7F..FF]
 
 	// Insert unsorted; list should be kept sorted by LowerLimit
-	if err := rt.AddBucket(kbA); err != nil {
+	if err := rt.addBucketLocked(&kbA); err != nil {
 		t.Fatalf("AddBucket(kbA) failed: %v", err)
 	}
-	if err := rt.AddBucket(kbB); err != nil {
+	if err := rt.addBucketLocked(&kbB); err != nil {
 		t.Fatalf("AddBucket(kbB) failed: %v", err)
 	}
-	if err := rt.AddBucket(kbC); err != nil {
+	if err := rt.addBucketLocked(&kbC); err != nil {
 		t.Fatalf("AddBucket(kbC) failed: %v", err)
 	}
 
@@ -101,7 +101,7 @@ func TestRoutingTable_AddBucket_SortedInsertAndDuplicate(t *testing.T) {
 	}
 
 	// Duplicate insert should be rejected
-	if err := rt.AddBucket(kbB); err == nil {
+	if err := rt.addBucketLocked(&kbB); err == nil {
 		t.Errorf("expected duplicate AddBucket(kbB) to error, got nil")
 	}
 }
@@ -124,7 +124,7 @@ func TestRoutingTable_RemoveBucket(t *testing.T) {
 	initial := rt.BucketList[0]
 
 	// Remove the initial bucket
-	if err := rt.RemoveBucket(initial); err != nil {
+	if err := rt.removeBucketLocked(initial); err != nil {
 		t.Fatalf("RemoveBucket(initial) failed: %v", err)
 	}
 	if len(rt.BucketList) != 0 {
@@ -132,7 +132,7 @@ func TestRoutingTable_RemoveBucket(t *testing.T) {
 	}
 
 	// Removing again should error
-	if err := rt.RemoveBucket(initial); err == nil {
+	if err := rt.removeBucketLocked(initial); err == nil {
 		t.Errorf("expected error when removing non-existent bucket, got nil")
 	}
 }
