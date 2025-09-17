@@ -1,13 +1,25 @@
 # docker-compose.yml
-services:
-  node:
-    image: kadlab:latest           # or use "build: ." if you prefer
-    command: ["/app/node", "-bind", ":9999"]
-    environment:
-      - INSTANCE=${HOSTNAME:-node}
-    networks: [kadnet]
-    restart: unless-stopped
+# services:
+#   node:
+#     image: kadlab:latest           # or use "build: ." if you prefer
+#     command: ["/app/node", "-bind", ":9999"]
+#     environment:
+#       - INSTANCE=${HOSTNAME:-node}
+#     networks: [kadnet]
+#     restart: unless-stopped
 
-networks:
-  kadnet:
-    driver: bridge
+# networks:
+#   kadnet:
+#     driver: bridge
+
+# docker-compose.yml
+services:
+  node1:
+    image: kadlab:latest
+    command: ["/app/node", "-bind", ":9999"]
+    networks: [kadnet]
+  node2:
+    image: kadlab:latest
+    command: ["/app/node", "-bind", ":9999"]
+    networks: [kadnet]
+networks: { kadnet: { driver: bridge } }

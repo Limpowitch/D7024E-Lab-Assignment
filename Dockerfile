@@ -12,7 +12,7 @@ COPY go.mod go.sum ./
 RUN go env && go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 go build -o /app/node ./kademlia/cmd/node
+RUN CGO_ENABLED=0 go build -o /app/node ./kademlia/cmd/main
 
 FROM alpine:3.20
 WORKDIR /app
