@@ -48,4 +48,34 @@ func (kb *Kbucket) RemoveFromKBucket(c Contact) error {
 	return nil
 }
 
+func (kb *Kbucket) Upsert(c Contact) {
+	kb.mu.Lock()
+	defer kb.mu.Unlock()
+
+	if kb.moveToTailIfExist(c) {
+		return
+	}
+
+	if len(kb.Contacts) < kb.Capacity {
+		kb.Contacts = append(kb.Contacts, c)
+		return
+	}
+
+	copy(kb.Contacts, kb.Contacts[1:])
+	kb.Contacts[len(kb.Contacts)-1] = c
+}
+
+// if the contact is already present in bucket, place it last (update for LRU-standard, essentially)
+func (kb *Kbucket) moveToTailIfExist(c Contact) bool {
+	for i := range kb.Contacts {
+		if kb.Contacts[i].ID == c.ID {
+			temp := kb.Contacts[i]
+			copy(kb.Contacts[i:], kb.Contacts[i+1:])
+			kb.Contacts[len(kb.Contacts)-1] = temp
+			return true
+		}
+	}
+	return false
+}
+
 //TODO
