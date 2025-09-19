@@ -67,6 +67,23 @@ func NewNode(bind string) (*Node, error) {
 		return MarshalContactList(cs) // encode--pls look at this later
 	}
 
+	n.Svc.OnStore = func(key [20]byte, val []byte) {
+		n.mu.Lock()
+		n.Store[string(key[:])] = Value{Data: append([]byte(nil), val...)} // copy for safety
+		n.mu.Unlock()
+	}
+
+	n.Svc.OnFindValue = func(key [20]byte) (val []byte, contactsPayload []byte) {
+		n.mu.RLock()
+		v, ok := n.Store[string(key[:])]
+		n.mu.RUnlock()
+		if ok {
+			return []byte(v.Data), nil
+		}
+		cs := n.RoutingTable.Closest(key, K)
+		return nil, MarshalContactList(cs)
+	}
+
 	return n, nil
 }
 
@@ -78,6 +95,31 @@ func (n *Node) FindNode(to string, target [20]byte) ([]Contact, error) {
 		return nil, err
 	}
 	return UnmarshalContactList(payload)
+}
+
+// StoreValue: compute key (e.g., SHA-1 of value) and send STORE to a peer.
+// Returns the 20-byte key so callers can look it up later.
+func (n *Node) StoreValue(ctx context.Context, to string, value string) ([20]byte, error) {
+	// per course: key = hash(value), immutable UTF-8 strings
+	key := SHA1ID([]byte(value)) // implement as [20]byte
+	return key, n.Svc.Store(ctx, to, key, []byte(value))
+}
+
+// FindValue: query one peer; return either value or contacts.
+func (n *Node) FindValue(ctx context.Context, to string, key [20]byte) (val *string, contacts []Contact, err error) {
+	res, err2 := n.Svc.FindValue(ctx, to, key)
+	if err2 != nil {
+		return nil, nil, err2
+	}
+	if res.Value != nil {
+		s := string(res.Value)
+		return &s, nil, nil
+	}
+	cs, err3 := UnmarshalContactList(res.Contacts)
+	if err3 != nil {
+		return nil, nil, err3
+	}
+	return nil, cs, nil
 }
 
 func (n *Node) Start()       { n.Svc.Start() }

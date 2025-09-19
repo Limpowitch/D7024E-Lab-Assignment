@@ -13,21 +13,25 @@ import (
 
 var ErrTimeout = errors.New("rpc timeout")
 
+// callbacks for server
 type NodeID = [20]byte // local alias; avoids importing node
 type FindNodeHandler func(target NodeID) []byte
-type SeenHook func(addr string, peerID [20]byte)
+type SeenHook func(addr string, peerID [20]byte) // added it just for qualifying later on
+type StoreHandler func(key [20]byte, val []byte)
+type FindValueHandler func(key [20]byte) (val []byte, contactsPayload []byte)
 
 type Service struct {
 	udp *transport.UDPServer
 
-	// in-flight requests: RPCID -> response chan
 	mu      sync.Mutex
 	waiters map[wire.RPCID]chan wire.Envelope
 
-	SelfID     [20]byte
-	OnSeen     SeenHook //just call this when we learn another nodes id
-	SelfAddr   string
-	OnFindNode FindNodeHandler
+	SelfID      [20]byte
+	OnSeen      SeenHook //just call this when we learn another nodes id
+	SelfAddr    string
+	OnFindNode  FindNodeHandler
+	OnStore     StoreHandler
+	OnFindValue FindValueHandler
 }
 
 func New(bind string, selfID [20]byte, selfAddr string) (*Service, error) {
@@ -105,6 +109,43 @@ func (s *Service) FindNode(ctx context.Context, to string, target NodeID) ([]byt
 	return resp.Payload, nil // raw bytes; node layer will decode
 }
 
+func (service *Service) Store(ctx context.Context, to string, key [20]byte, value []byte) error {
+	// build payload: key(20) + len(2) + value
+	if len(value) > 65535 {
+		return errors.New("value too large (>65535)")
+	}
+	payload := make([]byte, 20+2+len(value))
+	copy(payload[:20], key[:])
+	payload[20] = byte(len(value) >> 8)
+	payload[21] = byte(len(value))
+	copy(payload[22:], value)
+
+	req := wire.Envelope{ID: wire.NewRPCID(), Type: "STORE", Payload: payload}
+	_, err := service.sendAndWait(ctx, to, req)
+	return err
+}
+
+type FindValueResult struct {
+	Value    []byte // if non-nil, we got the value
+	Contacts []byte // encoded contacts payload; decode in node layer (UnmarshalContactList)
+}
+
+func (service *Service) FindValue(ctx context.Context, to string, key [20]byte) (FindValueResult, error) {
+	req := wire.Envelope{ID: wire.NewRPCID(), Type: "FIND_VALUE", Payload: key[:]}
+	resp, err := service.sendAndWait(ctx, to, req)
+	if err != nil {
+		return FindValueResult{}, err
+	}
+	switch resp.Type {
+	case "FIND_VALUE_VAL":
+		return FindValueResult{Value: resp.Payload}, nil
+	case "FIND_VALUE_CONT":
+		return FindValueResult{Contacts: resp.Payload}, nil
+	default:
+		return FindValueResult{}, errors.New("unexpected response: " + resp.Type)
+	}
+}
+
 func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 	//fmt.Println("onPacket:", env.Type, "from", from)
 
@@ -154,7 +195,82 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		}
 		service.mu.Unlock()
 
+	case "STORE":
+		log.Printf("[service] STORE from %s id=%x", from.String(), env.ID[:4])
+
+		// 20 + 2, so if less, it must be a invalid/bad request
+		if len(env.Payload) < 22 {
+			return
+		}
+
+		var key [20]byte
+		copy(key[:], env.Payload[:20])
+		l := int(env.Payload[20])<<8 | int(env.Payload[21])
+		if 22+l > len(env.Payload) {
+			return
+		}
+		val := make([]byte, l)
+		copy(val, env.Payload[22:22+l])
+
+		if service.OnStore != nil {
+			service.OnStore(key, val)
+		}
+		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "STORE_ACK"})
+
+	case "STORE_ACK":
+		log.Printf("[service] FIND_NODE_RESP from %s id=%x", from.String(), env.ID[:4])
+		// exactly as pong. maybe create function which both can call upon?
+		service.mu.Lock()
+		if ch, ok := service.waiters[env.ID]; ok {
+			delete(service.waiters, env.ID)
+			ch <- env
+		}
+		service.mu.Unlock()
+
+	case "FIND_VALUE":
+		log.Printf("[service] FIND_VALUE from %s id=%x", from.String(), env.ID[:4])
+
+		var key [20]byte
+		if len(env.Payload) >= 20 {
+			copy(key[:], env.Payload[:20])
+		}
+		var reply wire.Envelope
+		reply.ID = env.ID
+
+		if service.OnFindValue != nil {
+			val, contactsPayload := service.OnFindValue(key)
+			if val != nil {
+				reply.Type = "FIND_VALUE_VAL"
+				reply.Payload = val
+			} else {
+				reply.Type = "FIND_VALUE_CONT"
+				reply.Payload = contactsPayload // can be nil/empty?
+			}
+		} else {
+			// default handle: no value or contacts
+			reply.Type = "FIND_VALUE_CONT"
+			reply.Payload = nil
+		}
+		_ = service.udp.Reply(from, reply)
+
+	case "FIND_VALUE_VAL":
+		log.Printf("[service] FIND_NODE_RESP from %s id=%x", from.String(), env.ID[:4])
+		// exactly as pong. maybe create function which both can call upon?
+		service.mu.Lock()
+		if ch, ok := service.waiters[env.ID]; ok {
+			delete(service.waiters, env.ID)
+			ch <- env
+		}
+		service.mu.Unlock()
+	case "FIND_VALUE_CONT":
+		log.Printf("[service] FIND_NODE_RESP from %s id=%x", from.String(), env.ID[:4])
+		// exactly as pong. maybe create function which both can call upon?
+		service.mu.Lock()
+		if ch, ok := service.waiters[env.ID]; ok {
+			delete(service.waiters, env.ID)
+			ch <- env
+		}
+		service.mu.Unlock()
 	default:
-		// senare: FIND_NODE, STORE, liknande ALBIN HÄR FINNS COOL PLATS HEHE
 	}
 }
