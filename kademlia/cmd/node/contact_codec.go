@@ -1,6 +1,7 @@
 package node
 
 import (
+	"crypto/sha1"
 	"encoding/binary"
 	"errors"
 )
@@ -63,4 +64,9 @@ func UnmarshalContactList(b []byte) ([]Contact, error) {
 		b = b[need:]
 	}
 	return res, nil
+}
+
+func SHA1ID(b []byte) [20]byte {
+	h := sha1.Sum(b)
+	return h
 }
