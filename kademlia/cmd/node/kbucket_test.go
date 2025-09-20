@@ -12,7 +12,7 @@ func TestNewKbucket(t *testing.T) {
 		upper[i] = 0xFF // max value for upper limit
 	}
 
-	node, err := NewNode("127.0.0.1:0")
+	node, err := NewNode("127.0.0.1:0", "")
 	if err != nil {
 		t.Fatalf("expected no error at NewNode creation, got %v", err)
 	}

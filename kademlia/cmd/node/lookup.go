@@ -4,9 +4,8 @@ import (
 	"sort"
 )
 
-// Tuning constants. Adjust later if you like.
 const (
-	alpha = 3 // parallelism
+	alpha = 3
 )
 
 type slEntry struct {
@@ -18,6 +17,7 @@ type slEntry struct {
 type shortlist struct {
 	target [20]byte
 	k      int
+	max    int
 	idx    map[[20]byte]int // ID -> index in 'list'
 	list   []slEntry
 }
@@ -28,22 +28,37 @@ func newShortlist(target [20]byte, k int) *shortlist {
 		k:      k,
 		idx:    make(map[[20]byte]int),
 		list:   make([]slEntry, 0, k*2),
+		max:    k,
 	}
 }
 
 // add merges contacts, dedups by ID, resorts by XOR, truncates to k.
-func (s *shortlist) add(cs []Contact) {
+func (s *shortlist) add(cs []Contact) (changed bool) {
+	oldBest := s.best()
 	for _, c := range cs {
 		if _, ok := s.idx[c.ID]; ok {
 			continue
 		}
 		s.list = append(s.list, slEntry{c: c, d: xor(s.target, c.ID)})
+		changed = true
 	}
-	sort.Slice(s.list, func(i, j int) bool { return less160(s.list[i].d, s.list[j].d) })
-	if len(s.list) > s.k {
-		s.list = s.list[:s.k]
+	if changed {
+		sort.Slice(s.list, func(i, j int) bool { return less160(s.list[i].d, s.list[j].d) })
+		if len(s.list) > s.max {
+			s.list = s.list[:s.max]
+		}
+		s.rebuildIndex()
+		if !changed {
+			// if only reorder happened (rare), also treating “best improved” as change just in case!
+			changed = s.improved(oldBest)
+		} else {
+			// definitely changed if best improved
+			if s.improved(oldBest) {
+				changed = true
+			}
+		}
 	}
-	s.rebuildIndex()
+	return changed
 }
 
 func (s *shortlist) rebuildIndex() {
@@ -53,7 +68,7 @@ func (s *shortlist) rebuildIndex() {
 	}
 }
 
-// nextBatch returns up to α closest *unqueried* contacts and marks them 'ask'.
+// nextBatch returns alpha closest UNQUIERIED contacts and marks them
 func (s *shortlist) nextBatch(a int) []Contact {
 	out := make([]Contact, 0, a)
 	for i := range s.list {

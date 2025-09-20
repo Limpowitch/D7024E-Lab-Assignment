@@ -7,7 +7,7 @@ import (
 func TestNewNode(t *testing.T) {
 	hostname := "127.0.0.1:0"
 
-	node, err := NewNode(hostname)
+	node, err := NewNode(hostname, "")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

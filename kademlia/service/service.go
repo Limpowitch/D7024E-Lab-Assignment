@@ -19,6 +19,7 @@ type FindNodeHandler func(target NodeID) []byte
 type SeenHook func(addr string, peerID [20]byte) // added it just for qualifying later on
 type StoreHandler func(key [20]byte, val []byte)
 type FindValueHandler func(key [20]byte) (val []byte, contactsPayload []byte)
+type DumpRTHandler func() []byte
 
 type Service struct {
 	udp *transport.UDPServer
@@ -32,6 +33,10 @@ type Service struct {
 	OnFindNode  FindNodeHandler
 	OnStore     StoreHandler
 	OnFindValue FindValueHandler
+	OnDumpRT    DumpRTHandler
+
+	OnAdminPut func(value []byte) (key [20]byte, err error)
+	OnAdminGet func(key [20]byte) (value []byte, ok bool)
 }
 
 func New(bind string, selfID [20]byte, selfAddr string) (*Service, error) {
@@ -130,6 +135,18 @@ type FindValueResult struct {
 	Contacts []byte // encoded contacts payload; decode in node layer (UnmarshalContactList)
 }
 
+func (s *Service) AdminRT(ctx context.Context, to string) ([]byte, error) {
+	req := wire.Envelope{ID: wire.NewRPCID(), Type: "ADMIN_RT"}
+	resp, err := s.sendAndWait(ctx, to, req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Type != "ADMIN_RT_RESP" {
+		return nil, errors.New("unexpected response: " + resp.Type)
+	}
+	return resp.Payload, nil
+}
+
 func (service *Service) FindValue(ctx context.Context, to string, key [20]byte) (FindValueResult, error) {
 	req := wire.Envelope{ID: wire.NewRPCID(), Type: "FIND_VALUE", Payload: key[:]}
 	resp, err := service.sendAndWait(ctx, to, req)
@@ -151,7 +168,7 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 
 	switch env.Type {
 	case "PING":
-		log.Printf("[service] PING from %s id=%x", from.String(), env.ID[:4])
+		//log.Printf("[service] PING from %s id=%x", from.String(), env.ID[:4])
 		var pid [20]byte
 		if len(env.Payload) >= 20 {
 			copy(pid[:], env.Payload[:20])
@@ -159,11 +176,19 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 				service.OnSeen(from.String(), pid)
 			}
 		}
-		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "PONG"})
+		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "PONG", Payload: service.SelfID[:]})
 
 	case "PONG":
+		var pid [20]byte
+		if len(env.Payload) >= 20 {
+			copy(pid[:], env.Payload[:20])
+			if service.OnSeen != nil {
+				service.OnSeen(from.String(), pid)
+			}
+		}
+
 		// wake up waiters
-		log.Printf("[service] PONG from %s id=%x", from.String(), env.ID[:4])
+		//log.Printf("[service] PONG from %s id=%x", from.String(), env.ID[:4])
 		service.mu.Lock()
 		if ch, ok := service.waiters[env.ID]; ok {
 			delete(service.waiters, env.ID)
@@ -218,7 +243,7 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "STORE_ACK"})
 
 	case "STORE_ACK":
-		log.Printf("[service] FIND_NODE_RESP from %s id=%x", from.String(), env.ID[:4])
+		log.Printf("[service] STORE_ACK from %s id=%x", from.String(), env.ID[:4])
 		// exactly as pong. maybe create function which both can call upon?
 		service.mu.Lock()
 		if ch, ok := service.waiters[env.ID]; ok {
@@ -254,7 +279,7 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		_ = service.udp.Reply(from, reply)
 
 	case "FIND_VALUE_VAL":
-		log.Printf("[service] FIND_NODE_RESP from %s id=%x", from.String(), env.ID[:4])
+		log.Printf("[service] FIND_VALUE_VAL from %s id=%x", from.String(), env.ID[:4])
 		// exactly as pong. maybe create function which both can call upon?
 		service.mu.Lock()
 		if ch, ok := service.waiters[env.ID]; ok {
@@ -263,7 +288,7 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		}
 		service.mu.Unlock()
 	case "FIND_VALUE_CONT":
-		log.Printf("[service] FIND_NODE_RESP from %s id=%x", from.String(), env.ID[:4])
+		log.Printf("[service] FIND_VALUE_CONT from %s id=%x", from.String(), env.ID[:4])
 		// exactly as pong. maybe create function which both can call upon?
 		service.mu.Lock()
 		if ch, ok := service.waiters[env.ID]; ok {
@@ -271,6 +296,115 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 			ch <- env
 		}
 		service.mu.Unlock()
+	case "ADMIN_RT":
+		var pl []byte
+		if service.OnDumpRT != nil {
+			pl = service.OnDumpRT()
+		}
+		_ = service.udp.Reply(from, wire.Envelope{
+			ID:      env.ID,
+			Type:    "ADMIN_RT_RESP",
+			Payload: pl,
+		})
+
+	case "ADMIN_RT_RESP":
+		service.mu.Lock()
+		if ch, ok := service.waiters[env.ID]; ok {
+			delete(service.waiters, env.ID)
+			ch <- env
+		}
+		service.mu.Unlock()
+	case "ADMIN_PUT":
+		log.Printf("[service] ADMIN_PUT from %s", from.String())
+		if service.OnAdminPut == nil {
+			_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "ADMIN_PUT_RESP"}) // empty/failure
+			return
+		}
+		key, err := service.OnAdminPut(env.Payload)
+		if err != nil {
+			_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "ADMIN_PUT_RESP"}) // empty/failure
+			return
+		}
+		_ = service.udp.Reply(from, wire.Envelope{
+			ID:      env.ID,
+			Type:    "ADMIN_PUT_RESP",
+			Payload: key[:],
+		})
+
+	case "ADMIN_GET":
+		log.Printf("[service] ADMIN_GET from %s", from.String())
+		if len(env.Payload) < 20 {
+			return
+		}
+		var key [20]byte
+		copy(key[:], env.Payload[:20])
+
+		if service.OnAdminGet == nil {
+			_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "ADMIN_GET_NOTFOUND"})
+			return
+		}
+		if val, ok := service.OnAdminGet(key); ok {
+			_ = service.udp.Reply(from, wire.Envelope{
+				ID:      env.ID,
+				Type:    "ADMIN_GET_VAL",
+				Payload: val,
+			})
+		} else {
+			_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "ADMIN_GET_NOTFOUND"})
+		}
+	case "ADMIN_PUT_RESP":
+		service.wake(env.ID, env)
+
+	case "ADMIN_GET_VAL":
+		service.wake(env.ID, env)
+
+	case "ADMIN_GET_NOTFOUND":
+		service.wake(env.ID, env)
+
 	default:
 	}
+}
+
+// AdminPut asks a running node (daemon) to store a value using its RT.
+// Request:  value bytes
+// Response: 20B key (SHA-1)
+func (s *Service) AdminPut(ctx context.Context, to string, value []byte) ([20]byte, error) {
+	req := wire.Envelope{ID: wire.NewRPCID(), Type: "ADMIN_PUT", Payload: value}
+	resp, err := s.sendAndWait(ctx, to, req)
+	if err != nil {
+		return [20]byte{}, err
+	}
+	if resp.Type != "ADMIN_PUT_RESP" || len(resp.Payload) != 20 {
+		return [20]byte{}, errors.New("bad ADMIN_PUT response")
+	}
+	var key [20]byte
+	copy(key[:], resp.Payload[:20])
+	return key, nil
+}
+
+// AdminGet asks a running node (daemon) to resolve a key using its RT.
+// Response: value (if found) or notfound.
+func (s *Service) AdminGet(ctx context.Context, to string, key [20]byte) ([]byte, bool, error) {
+	req := wire.Envelope{ID: wire.NewRPCID(), Type: "ADMIN_GET", Payload: key[:]}
+	resp, err := s.sendAndWait(ctx, to, req)
+	if err != nil {
+		return nil, false, err
+	}
+	switch resp.Type {
+	case "ADMIN_GET_VAL":
+		return resp.Payload, true, nil
+	case "ADMIN_GET_NOTFOUND":
+		return nil, false, nil
+	default:
+		return nil, false, errors.New("bad ADMIN_GET response")
+	}
+}
+
+func (s *Service) wake(id wire.RPCID, env wire.Envelope) {
+	s.mu.Lock()
+	if ch, ok := s.waiters[id]; ok {
+		delete(s.waiters, id)
+		ch <- env
+	}
+	s.mu.Unlock()
 }

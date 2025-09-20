@@ -13,13 +13,22 @@
 #     driver: bridge
 
 # docker-compose.yml
+# docker-compose.yml
 services:
-  node1:
+  seed:
     image: kadlab:latest
-    command: ["/app/node", "-bind", ":9999"]
+    command: ["serve","-bind","0.0.0.0:9999","-adv","seed:9999"]
     networks: [kadnet]
-  node2:
+
+  node:
     image: kadlab:latest
-    command: ["/app/node", "-bind", ":9999"]
+    command: ["serve","-bind","0.0.0.0:9999","-seeds","seed:9999","-adv","${HOSTNAME}:9999"]
     networks: [kadnet]
-networks: { kadnet: { driver: bridge } }
+
+networks:
+  kadnet:
+    driver: bridge
+
+
+# docker-compose.yml
+

@@ -8,10 +8,10 @@ import (
 )
 
 func TestStoreAndFindValue_Value(t *testing.T) {
-	nA, _ := NewNode("127.0.0.1:0")
+	nA, _ := NewNode("127.0.0.1:0", "")
 	nA.Start()
 	defer nA.Close()
-	nB, _ := NewNode("127.0.0.1:0")
+	nB, _ := NewNode("127.0.0.1:0", "")
 	nB.Start()
 	defer nB.Close()
 

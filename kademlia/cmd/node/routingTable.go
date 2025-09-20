@@ -2,6 +2,8 @@ package node
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -168,4 +170,23 @@ func (rt *RoutingTable) bucketIndexFor(id [20]byte) int {
 		}
 	}
 	return -1
+}
+
+// in node/routingtable.go
+func (rt *RoutingTable) Dump() string {
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "self=%x\n", rt.SelfID[:4])
+	for i, b := range rt.BucketList {
+		b.mu.RLock()
+		fmt.Fprintf(&sb, "bucket[%02d] [%x..%x] %d contacts\n",
+			i, b.LowerLimit[:2], b.UpperLimit[:2], len(b.Contacts))
+		for _, c := range b.Contacts {
+			fmt.Fprintf(&sb, "  - %x %s\n", c.ID[:4], c.Addr)
+		}
+		b.mu.RUnlock()
+	}
+	return sb.String()
 }

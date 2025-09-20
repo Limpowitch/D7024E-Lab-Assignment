@@ -21,10 +21,10 @@ func TestLookupNode_SmallNetwork(t *testing.T) {
 	// }
 
 	// It’s much simpler to use your Node wrapper:
-	nA, _ := NewNode("127.0.0.1:0")
-	nB, _ := NewNode("127.0.0.1:0")
-	nC, _ := NewNode("127.0.0.1:0")
-	nD, _ := NewNode("127.0.0.1:0")
+	nA, _ := NewNode("127.0.0.1:0", "")
+	nB, _ := NewNode("127.0.0.1:0", "")
+	nC, _ := NewNode("127.0.0.1:0", "")
+	nD, _ := NewNode("127.0.0.1:0", "")
 	for _, n := range []*Node{nA, nB, nC, nD} {
 		n.Start()
 		defer n.Close()
