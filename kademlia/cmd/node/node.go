@@ -98,7 +98,9 @@ func NewNode(bind string, adv string) (*Node, error) {
 	}
 
 	// ADMIN_GET: iterative get using our RT (and any seeds already known).
-	n.Svc.OnAdminGet = func(key [20]byte) ([]byte, bool) {
+	// node/node.go (inside NewNode)
+	n.Svc.OnAdminGet = func(ctx context.Context, key [20]byte) ([]byte, bool) {
+		// Local fast path
 		n.mu.RLock()
 		if v, ok := n.Store[string(key[:])]; ok && len(v.Data) > 0 {
 			out := append([]byte(nil), v.Data...)
@@ -107,17 +109,13 @@ func NewNode(bind string, adv string) (*Node, error) {
 		}
 		n.mu.RUnlock()
 
-		seeds := n.RoutingTable.Closest(key, K)
-		if len(seeds) == 0 {
-			return nil, false
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		defer cancel()
+		seeds := n.RoutingTable.Closest(key, K) // fine if empty
 		val, _, err := n.GetValueIterative(ctx, key, seeds)
 		if err == nil && val != "" {
 			return []byte(val), true
 		}
+		// Optional: log for clarity — you already have similar logs.
+		// log.Printf("[admin-get] MISS err=%v", err)
 		return nil, false
 	}
 
@@ -144,7 +142,7 @@ func NewNode(bind string, adv string) (*Node, error) {
 	// when asked FIND_NODE we reply with k closest from our own routing table
 	n.Svc.OnFindNode = func(target [20]byte) []byte {
 		// start with our own contact so callers learn at least one node
-		self := Contact{ID: n.NodeID, Addr: n.adv}
+		self := Contact{ID: n.NodeID, Addr: n.AdvertisedAddr()}
 		cs := n.RoutingTable.Closest(target, K)
 
 		// avoid duplicate if we already have ourselves in RT (unlikely early)
