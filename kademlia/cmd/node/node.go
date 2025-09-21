@@ -112,7 +112,7 @@ func NewNode(bind string, adv string) (*Node, error) {
 			return nil, false
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
 		val, _, err := n.GetValueIterative(ctx, key, seeds)
 		if err == nil && val != "" {
@@ -201,31 +201,6 @@ func (n *Node) FindNode(to string, target [20]byte) ([]Contact, error) {
 	return UnmarshalContactList(payload)
 }
 
-// StoreValue: compute key (e.g., SHA-1 of value) and send STORE to a peer.
-// Returns the 20-byte key so callers can look it up later.
-func (n *Node) StoreValue(ctx context.Context, to string, value string) ([20]byte, error) {
-	// per course: key = hash(value), immutable UTF-8 strings
-	key := SHA1ID([]byte(value)) // implement as [20]byte
-	return key, n.Svc.Store(ctx, to, key, []byte(value))
-}
-
-// FindValue: query one peer; return either value or contacts.
-func (n *Node) FindValue(ctx context.Context, to string, key [20]byte) (val *string, contacts []Contact, err error) {
-	res, err2 := n.Svc.FindValue(ctx, to, key)
-	if err2 != nil {
-		return nil, nil, err2
-	}
-	if res.Value != nil {
-		s := string(res.Value)
-		return &s, nil, nil
-	}
-	cs, err3 := UnmarshalContactList(res.Contacts)
-	if err3 != nil {
-		return nil, nil, err3
-	}
-	return nil, cs, nil
-}
-
 func (n *Node) Start() {
 	n.Svc.Start()
 	go n.bootstrap()
@@ -246,15 +221,6 @@ func isZero(id [20]byte) bool {
 	return id == z
 }
 
-// --- methods CLI / higher layers could use ---
-
-func (n *Node) PingPeer(targetAddr string) error {
-	// service.Ping sends our NodeID in the payload and waits for PONG
-	ctx := defaultTimeoutContext()
-	defer ctx.Cancel()
-	return n.Svc.Ping(ctx.Ctx, targetAddr)
-}
-
 // storag helpers
 func (n *Node) Put(key string, value Value) {
 	n.mu.Lock()
@@ -266,15 +232,4 @@ func (n *Node) Get(key string) (Value, bool) {
 	defer n.mu.RUnlock()
 	v, ok := n.Store[key]
 	return v, ok
-}
-
-// idk if we need this but i'll leave it for now
-type cancelCtx struct {
-	Ctx    context.Context
-	Cancel context.CancelFunc
-}
-
-func defaultTimeoutContext() cancelCtx {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	return cancelCtx{Ctx: ctx, Cancel: cancel}
 }
