@@ -69,7 +69,7 @@ func cmdLocalGet(args []string) error {
 	n.Start()
 	defer n.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	val, ok, err := n.Svc.AdminGet(ctx, *to, key)
@@ -80,5 +80,7 @@ func cmdLocalGet(args []string) error {
 		return errors.New("not found")
 	}
 	fmt.Println(string(val))
+	fmt.Printf("%q\n", val)
+	fmt.Printf("[len=%d]\n", len(val))
 	return nil
 }

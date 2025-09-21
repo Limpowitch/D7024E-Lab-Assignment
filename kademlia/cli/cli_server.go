@@ -2,7 +2,7 @@ package cli
 
 import (
 	"context"
-	"errors"
+	"crypto/rand"
 	"flag"
 	"fmt"
 	"os"
@@ -32,21 +32,29 @@ func cmdServe(args []string) error {
 	fmt.Println("node listening on", n.Svc.Addr())
 
 	// bootstrap: ping each seed and do one FindNode to kick-start RT
+	// after n.Start() in cmdServe
 	for _, s := range splitCSV(*seeds) {
-		ctx1, c1 := context.WithTimeout(context.Background(), time.Second)
-		_ = n.Svc.Ping(ctx1, s)
-		c1()
+		// 1) learn seed’s ID
+		ctx, c := context.WithTimeout(context.Background(), time.Second)
+		_ = n.Svc.Ping(ctx, s)
+		c()
 
-		ctx2, c2 := context.WithTimeout(context.Background(), 1500*time.Millisecond)
-		// ask the seed directly once; it will include itself now
-		raw, err := n.Svc.FindNode(ctx2, s, n.NodeID)
-		c2()
-		if err == nil && len(raw) > 0 {
-			if cs, e := node.UnmarshalContactList(raw); e == nil {
-				for _, c := range cs {
-					n.RoutingTable.Update(c)
+		// 2) several lookups to diversify buckets
+		for i := 0; i < 4; i++ {
+			ctx2, c2 := context.WithTimeout(context.Background(), 1200*time.Millisecond)
+			// random target near self on first pass; fully random afterwards
+			var t [20]byte
+			if i == 0 {
+				t = n.NodeID
+			} else {
+				if _, err := rand.Read(t[:]); err == nil { /* ok */
 				}
 			}
+			_, err = n.LookupNode(ctx2, t)
+			if err != nil {
+				fmt.Println("error: ", err)
+			}
+			c2()
 		}
 	}
 
@@ -56,14 +64,14 @@ func cmdServe(args []string) error {
 
 func cmdRT(args []string) error {
 	fs := flag.NewFlagSet("rt", flag.ContinueOnError)
-	to := fs.String("to", "", "host:port of running node to inspect")
+	to := fs.String("to", "127.0.0.1:9999", "host:port of running node to inspect")
 	bind := fs.String("bind", ":0", "local bind for the client")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *to == "" {
-		return errors.New("-to is required")
-	}
+	// if *to == "" {
+	// 	return errors.New("-to is required")
+	// }
 
 	n, err := node.NewNode(*bind, "")
 	if err != nil {
