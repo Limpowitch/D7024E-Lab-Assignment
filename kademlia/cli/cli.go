@@ -38,7 +38,7 @@ Usage:
 
 
 Examples:
-  kademlia serve -bind :9999 -seeds node1:9999,node2:9999
-  kademlia put -to node2:9999 -value "hello world"
-  kademlia get  5e884898da28047151d0e56f8dc6292773603d0d@node2:9999`)
+  docker exec d7024e-lab-assignment-node-# /app/node serve -bind :9999 -seeds node1:9999,node2:9999
+  docker exec d7024e-lab-assignment-node-# /app/node put -to node2:9999 -value "hello world"
+  docker exec d7024e-lab-assignment-node-# /app/node get  5e884898da28047151d0e56f8dc6292773603d0d@node2:9999`)
 }
