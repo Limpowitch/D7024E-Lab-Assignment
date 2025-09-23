@@ -218,16 +218,3 @@ func isZero(id [20]byte) bool {
 	var z [20]byte
 	return id == z
 }
-
-// storag helpers
-func (n *Node) Put(key string, value Value) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.Store[key] = value
-}
-func (n *Node) Get(key string) (Value, bool) {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-	v, ok := n.Store[key]
-	return v, ok
-}

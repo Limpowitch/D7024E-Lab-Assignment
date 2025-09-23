@@ -71,12 +71,6 @@ func (n *Node) LookupNode(ctx context.Context, target [20]byte) ([]Contact, erro
 		if !progressed {
 			break
 		}
-
-		// // stop once converged
-		// if !sl.improved(prevBest) {
-		// 	break
-		// }
-		// prevBest = sl.best()
 	}
 
 	return sl.contacts(), nil
