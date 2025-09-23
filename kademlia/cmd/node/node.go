@@ -13,6 +13,7 @@ import (
 
 const K = 20 // bucket size
 
+// A Kademlia node
 type Node struct {
 	NodeID       [20]byte
 	Addr         string // bind addr we listen on (e.g. "127.0.0.1:9999")
@@ -24,6 +25,7 @@ type Node struct {
 	mu sync.RWMutex
 }
 
+// Creates a new node
 func NewNode(bind string, adv string) (*Node, error) {
 	// generate a random 160-bit node ID
 	var id [20]byte
@@ -56,8 +58,6 @@ func NewNode(bind string, adv string) (*Node, error) {
 		Svc:          svc,
 		adv:          adv,
 	}
-
-	// Advertised address already handled in your constructor; not shown here.
 
 	// ADMIN_PUT: compute key, do lookup(key), store to K closest, return key.
 	n.Svc.OnAdminPut = func(value []byte) ([20]byte, error) {
@@ -182,6 +182,7 @@ func NewNode(bind string, adv string) (*Node, error) {
 	return n, nil
 }
 
+// Returns the adress thats being advertised to other nodes
 func (n *Node) AdvertisedAddr() string {
 	if n.Svc.SelfAddr != "" {
 		return n.Svc.SelfAddr
@@ -189,6 +190,7 @@ func (n *Node) AdvertisedAddr() string {
 	return n.Svc.Addr() // fallback to real bound address
 }
 
+// Finds the given node ID
 func (n *Node) FindNode(to string, target [20]byte) ([]Contact, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -199,21 +201,25 @@ func (n *Node) FindNode(to string, target [20]byte) ([]Contact, error) {
 	return UnmarshalContactList(payload)
 }
 
+// Starts the service and bootstraps the node
 func (n *Node) Start() {
 	n.Svc.Start()
 	go n.bootstrap()
 }
 
+// Bootstraps the node and populates its routing table
 func (n *Node) bootstrap() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	_, _ = n.LookupNode(ctx, n.NodeID)
 }
 
+// Closes the node and its service
 func (n *Node) Close() error {
 	return n.Svc.Close()
 }
 
+// Checks if a NodeID is all zeroes
 func isZero(id [20]byte) bool {
 	var z [20]byte
 	return id == z

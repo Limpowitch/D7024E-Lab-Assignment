@@ -2,12 +2,15 @@ package node
 
 import "sort"
 
+// Returns the k closest contacts to the target ID from the routing table
 func xor(a, b [20]byte) (out [20]byte) {
 	for i := 0; i < 20; i++ {
 		out[i] = a[i] ^ b[i]
 	}
 	return
 }
+
+// Compares two 160 bit values
 func less160(a, b [20]byte) bool { // moved it here because it made more sense in my view
 	for i := 0; i < 20; i++ {
 		if a[i] != b[i] {
@@ -17,6 +20,7 @@ func less160(a, b [20]byte) bool { // moved it here because it made more sense i
 	return false
 }
 
+// Returns the k closest contacts to the target ID
 func (rt *RoutingTable) Closest(target [20]byte, k int) []Contact {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()

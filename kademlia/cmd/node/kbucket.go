@@ -13,6 +13,7 @@ type Kbucket struct {
 	mu         sync.RWMutex
 }
 
+// Creates a new kbucket
 func NewKBucket(k int, lower, upper [20]byte, collection []Contact) (Kbucket, error) {
 	return Kbucket{
 		Capacity:   k,
@@ -22,12 +23,14 @@ func NewKBucket(k int, lower, upper [20]byte, collection []Contact) (Kbucket, er
 	}, nil
 }
 
+// Adds a contact to the kbucket
 func (kb *Kbucket) AddToKBucket(id Contact) { // We simply append here, no capacity check needed (will be handled elsewere)
 	kb.mu.Lock()
 	defer kb.mu.Unlock()
 	kb.Contacts = append(kb.Contacts, id)
 }
 
+// Removes a contact from the kbucket
 func (kb *Kbucket) RemoveFromKBucket(c Contact) error {
 	kb.mu.Lock()
 	defer kb.mu.Unlock()
@@ -48,6 +51,7 @@ func (kb *Kbucket) RemoveFromKBucket(c Contact) error {
 	return nil
 }
 
+// Upserts a contact to the kbucket
 func (kb *Kbucket) Upsert(c Contact) {
 	kb.mu.Lock()
 	defer kb.mu.Unlock()

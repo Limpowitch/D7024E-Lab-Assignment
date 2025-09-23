@@ -8,6 +8,7 @@ const (
 	alpha = 3
 )
 
+// An entry in the shortlist
 type slEntry struct {
 	c   Contact
 	d   [20]byte // XOR distance to target
@@ -22,6 +23,7 @@ type shortlist struct {
 	list   []slEntry
 }
 
+// creates a new shortlist for given target and k
 func newShortlist(target [20]byte, k int) *shortlist {
 	return &shortlist{
 		target: target,
@@ -61,6 +63,7 @@ func (s *shortlist) add(cs []Contact) (changed bool) {
 	return changed
 }
 
+// Rebuilds the index map from the list
 func (s *shortlist) rebuildIndex() {
 	s.idx = make(map[[20]byte]int, len(s.list))
 	for i := range s.list {
@@ -103,6 +106,7 @@ func (s *shortlist) best() [20]byte {
 	return s.list[0].d
 }
 
+// returns all contacts in the shortlist
 func (s *shortlist) contacts() []Contact {
 	out := make([]Contact, len(s.list))
 	for i := range s.list {

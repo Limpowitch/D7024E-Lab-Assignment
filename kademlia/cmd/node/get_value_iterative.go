@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// Iterative lookup for a value by its key
 func (n *Node) GetValueIterative(ctx context.Context, key [20]byte, seeds []Contact) (string, []Contact, error) {
 	foundCh := make(chan string, 1)
 

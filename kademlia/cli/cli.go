@@ -4,6 +4,7 @@ import (
 	"fmt"
 )
 
+// Different commands for the CLI interface
 func Run(args []string) error {
 	if len(args) == 0 {
 		usage()
@@ -28,6 +29,7 @@ func Run(args []string) error {
 	}
 }
 
+// Print usage information
 func usage() {
 	fmt.Println(`kademlia
 

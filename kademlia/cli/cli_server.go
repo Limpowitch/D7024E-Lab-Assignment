@@ -138,6 +138,7 @@ func cmdLocalGet(args []string) error {
 	return nil
 }
 
+// RT command: ask local node for its RT and print it out
 func cmdRT(args []string) error {
 	fs := flag.NewFlagSet("rt", flag.ContinueOnError)
 	to := fs.String("to", "127.0.0.1:9999", "host:port of running node to inspect") // should probably hard-code this in AdminRT but i'll keep it here for now (we always just call our own address)
@@ -173,6 +174,7 @@ func cmdRT(args []string) error {
 	return nil
 }
 
+// Splits comma separated values and trims spaces
 func splitCSV(s string) []string {
 	var out []string
 	for _, p := range strings.Split(s, ",") {
@@ -184,6 +186,7 @@ func splitCSV(s string) []string {
 	return out
 }
 
+// Waiting for signal
 func waitForSignal() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)

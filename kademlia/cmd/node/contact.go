@@ -10,6 +10,7 @@ type Contact struct {
 	LastSeen time.Time // updated on successful RPC if we want to do as we talked about in sprint 0 review//samme
 }
 
+// Creates a new contact with given information.
 func NewContact(id NodeID, addr string) Contact {
 	return Contact{ID: id, Addr: addr}
 }

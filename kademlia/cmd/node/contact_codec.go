@@ -6,6 +6,7 @@ import (
 	"errors"
 )
 
+// Encodes a contact to a byte slice and decodes a byte slice to a contact
 func (c Contact) MarshalBinary() []byte {
 	addr := []byte(c.Addr)
 	if len(addr) > 255 {
@@ -18,6 +19,7 @@ func (c Contact) MarshalBinary() []byte {
 	return out
 }
 
+// Decodes a byte slice to a contact
 func (c *Contact) UnmarshalBinary(b []byte) error {
 	if len(b) < IDBytes+1 {
 		return errors.New("short contact")
@@ -31,6 +33,7 @@ func (c *Contact) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
+// Encodes a list of contacts
 func MarshalContactList(list []Contact) []byte {
 	out := make([]byte, 2)
 	binary.BigEndian.PutUint16(out[:2], uint16(len(list)))
@@ -40,6 +43,7 @@ func MarshalContactList(list []Contact) []byte {
 	return out
 }
 
+// Decodes a byte slice to a list of contacts
 func UnmarshalContactList(b []byte) ([]Contact, error) {
 	if len(b) < 2 {
 		return nil, errors.New("short list")
@@ -66,6 +70,7 @@ func UnmarshalContactList(b []byte) ([]Contact, error) {
 	return res, nil
 }
 
+// Returns the SHA-1 hash of the input bytes
 func SHA1ID(b []byte) [20]byte {
 	h := sha1.Sum(b)
 	return h

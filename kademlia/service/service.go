@@ -41,6 +41,7 @@ type Service struct {
 	OnAdminGet func(ctx context.Context, key [20]byte) (value []byte, ok bool)
 }
 
+// Creates a new Service listening on bind (UDP addr) and identifying as selfID
 func New(bind string, selfID [20]byte, selfAddr string) (*Service, error) {
 	s := &Service{
 		waiters:  make(map[wire.RPCID]chan wire.Envelope),
@@ -100,6 +101,7 @@ func (service *Service) sendAndWait(ctx context.Context, to string, env wire.Env
 	}
 }
 
+// low-level RPCs (used by node layer)
 func (s *Service) FindNode(ctx context.Context, to string, target NodeID) ([]byte, error) {
 	req := wire.Envelope{
 		ID:      wire.NewRPCID(),
@@ -116,6 +118,7 @@ func (s *Service) FindNode(ctx context.Context, to string, target NodeID) ([]byt
 	return resp.Payload, nil // raw bytes; node layer will decode
 }
 
+// STORE RPC that store a value and returns acks that it was stored
 func (service *Service) Store(ctx context.Context, to string, key [20]byte, value []byte) error {
 	// build payload: key(20) + len(2) + value
 	if len(value) > 65535 {
@@ -137,6 +140,7 @@ type FindValueResult struct {
 	Contacts []byte // encoded contacts payload; decode in node layer (UnmarshalContactList)
 }
 
+// AdminRT asks a running node to dump its routing table
 func (s *Service) AdminRT(ctx context.Context, to string) ([]byte, error) {
 	req := wire.Envelope{ID: wire.NewRPCID(), Type: "ADMIN_RT"}
 	resp, err := s.sendAndWait(ctx, to, req)
@@ -149,6 +153,7 @@ func (s *Service) AdminRT(ctx context.Context, to string) ([]byte, error) {
 	return resp.Payload, nil
 }
 
+// FindValue looks for a value or contacts for a given key
 func (service *Service) FindValue(ctx context.Context, to string, key [20]byte) (FindValueResult, error) {
 	req := wire.Envelope{ID: wire.NewRPCID(), Type: "FIND_VALUE", Payload: key[:]}
 	resp, err := service.sendAndWait(ctx, to, req)
@@ -165,6 +170,7 @@ func (service *Service) FindValue(ctx context.Context, to string, key [20]byte) 
 	}
 }
 
+// handles the incomgin packets and the contact the right handlers
 func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 	//fmt.Println("onPacket:", env.Type, "from", from)
 
@@ -360,6 +366,7 @@ func (s *Service) AdminGet(ctx context.Context, to string, key [20]byte) ([]byte
 	}
 }
 
+// Helper to wake up a waiter for a given RPC ID
 func (s *Service) wake(id wire.RPCID, env wire.Envelope) {
 	s.mu.Lock()
 	if ch, ok := s.waiters[id]; ok {
@@ -369,6 +376,7 @@ func (s *Service) wake(id wire.RPCID, env wire.Envelope) {
 	s.mu.Unlock()
 }
 
+// Handles an incoming ADMIN_PUT request
 func (service *Service) handleAdminPut(from *net.UDPAddr, env wire.Envelope) {
 	log.Printf("[service] ADMIN_PUT from %s", from.String())
 	if service.OnAdminPut == nil {

@@ -13,6 +13,7 @@ type RoutingTable struct {
 	mu         sync.RWMutex
 }
 
+// Creates a new routing table with a single kbucket that is covering the entire id space
 func NewRoutingTable(SelfId, lower, upper [20]byte) (RoutingTable, error) {
 	const KBucketCapacity = 20
 
@@ -30,6 +31,7 @@ func NewRoutingTable(SelfId, lower, upper [20]byte) (RoutingTable, error) {
 	return rt, nil
 }
 
+// adds a bucket to the routing table
 func (rt *RoutingTable) addBucketLocked(kb *Kbucket) error {
 
 	lower := kb.LowerLimit
@@ -61,6 +63,7 @@ func (rt *RoutingTable) addBucketLocked(kb *Kbucket) error {
 	return nil
 }
 
+// removes a bucket from the routing table
 func (rt *RoutingTable) removeBucketLocked(kb *Kbucket) error {
 
 	if len(rt.BucketList) == 0 {
@@ -95,6 +98,7 @@ func (rt *RoutingTable) Update(c Contact) {
 	rt.BucketList[i].Upsert(c)
 }
 
+// Splits a bucket into two new buckets
 func (rt *RoutingTable) SplitBucket(originBucket *Kbucket) error {
 
 	rt.mu.Lock()
