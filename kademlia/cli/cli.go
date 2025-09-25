@@ -23,6 +23,8 @@ func Run(args []string) error {
 	case "help", "-h", "--help":
 		usage()
 		return nil
+	case "exit":
+		return cmdExit(args[1:])
 	default:
 		usage()
 		return fmt.Errorf("unknown command %q", args[0])

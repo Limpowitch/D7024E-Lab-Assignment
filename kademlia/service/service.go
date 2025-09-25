@@ -6,7 +6,9 @@ import (
 	"errors"
 	"log"
 	"net"
+	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/internal/transport"
@@ -22,6 +24,7 @@ type SeenHook func(addr string, peerID [20]byte) // added it just for qualifying
 type StoreHandler func(key [20]byte, val []byte)
 type FindValueHandler func(key [20]byte) (val []byte, contactsPayload []byte)
 type DumpRTHandler func() []byte
+type ExitHandler func()
 
 type Service struct {
 	udp *transport.UDPServer
@@ -36,6 +39,7 @@ type Service struct {
 	OnStore     StoreHandler
 	OnFindValue FindValueHandler
 	OnDumpRT    DumpRTHandler
+	OnExit      ExitHandler
 
 	OnAdminPut func(value []byte) (key [20]byte, err error)
 	OnAdminGet func(ctx context.Context, key [20]byte) (value []byte, ok bool)
@@ -99,6 +103,18 @@ func (service *Service) sendAndWait(ctx context.Context, to string, env wire.Env
 		service.mu.Unlock()
 		return wire.Envelope{}, ErrTimeout
 	}
+}
+
+func (s *Service) AdminExit(ctx context.Context, to string) error {
+	req := wire.Envelope{ID: wire.NewRPCID(), Type: "ADMIN_EXIT"}
+	resp, err := s.sendAndWait(ctx, to, req)
+	if err != nil {
+		return err
+	}
+	if resp.Type != "ADMIN_EXIT_OK" {
+		return errors.New("bad ADMIN_EXIT response: " + resp.Type)
+	}
+	return nil
 }
 
 // low-level RPCs (used by node layer)
@@ -305,6 +321,23 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		service.wake(env.ID, env)
 
 	case "ADMIN_GET_NOTFOUND":
+		service.wake(env.ID, env)
+
+	case "ADMIN_EXIT":
+		// Reply first so the client doesn't hang, then terminate asynchronously.
+		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "ADMIN_EXIT_OK"})
+
+		go func() {
+			// If the node installed a hook, call it; otherwise self-signal.
+			if service.OnExit != nil {
+				service.OnExit()
+				return
+			}
+			// Default: self-signal to unblock waitForSignal() in cmdServe
+			p, _ := os.FindProcess(os.Getpid())
+			_ = p.Signal(syscall.SIGTERM)
+		}()
+	case "ADMIN_EXIT_OK":
 		service.wake(env.ID, env)
 
 	default:

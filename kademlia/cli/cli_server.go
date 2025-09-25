@@ -64,6 +64,33 @@ func cmdServe(args []string) error {
 	return n.Close()
 }
 
+// in cli_server.go
+func cmdExit(args []string) error {
+	fs := flag.NewFlagSet("exit", flag.ContinueOnError)
+	to := fs.String("to", "127.0.0.1:9999", "address of local daemon")
+	bind := fs.String("bind", ":0", "local bind for the client")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	// tiny client node bound to :0
+	n, err := node.NewNode(*bind, "")
+	if err != nil {
+		return err
+	}
+	n.Start()
+	defer n.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := n.Svc.AdminExit(ctx, *to); err != nil {
+		return err
+	}
+	fmt.Println("ok")
+	return nil
+}
+
 // local-put: talk to 127.0.0.1:9999 (or override) and ask daemon to store.
 func cmdLocalPut(args []string) error {
 	fs := flag.NewFlagSet("local-put", flag.ContinueOnError)

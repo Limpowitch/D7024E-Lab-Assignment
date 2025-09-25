@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"fmt"
 	"log"
+	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/service"
@@ -57,6 +59,12 @@ func NewNode(bind string, adv string) (*Node, error) {
 		Store:        make(map[string]Value),
 		Svc:          svc,
 		adv:          adv,
+	}
+
+	n.Svc.OnExit = func() {
+		// need to unblock signal is serve. so we self signal:
+		p, _ := os.FindProcess(os.Getpid())
+		_ = p.Signal(syscall.SIGTERM)
 	}
 
 	// ADMIN_PUT: compute key, do lookup(key), store to K closest, return key.
