@@ -41,8 +41,9 @@ type Service struct {
 	OnDumpRT    DumpRTHandler
 	OnExit      ExitHandler
 
-	OnAdminPut func(value []byte) (key [20]byte, err error)
-	OnAdminGet func(ctx context.Context, key [20]byte) (value []byte, ok bool)
+	OnAdminPut    func(value []byte) (key [20]byte, err error)
+	OnAdminGet    func(ctx context.Context, key [20]byte) (value []byte, ok bool)
+	OnAdminForget func(key [20]byte) bool
 }
 
 // Creates a new Service listening on bind (UDP addr) and identifying as selfID
@@ -77,6 +78,18 @@ func (service *Service) Ping(ctx context.Context, to string) error {
 }
 
 // ---- core request/respons functionality ----
+
+func (s *Service) AdminForget(ctx context.Context, to string, key [20]byte) error {
+	req := wire.Envelope{ID: wire.NewRPCID(), Type: "ADMIN_FORGET", Payload: key[:]}
+	resp, err := s.sendAndWait(ctx, to, req)
+	if err != nil {
+		return err
+	}
+	if resp.Type != "ADMIN_FORGET_OK" {
+		return errors.New("bad ADMIN_FORGET response: " + resp.Type)
+	}
+	return nil
+}
 
 func (service *Service) sendAndWait(ctx context.Context, to string, env wire.Envelope) (wire.Envelope, error) {
 	// register waiter
@@ -324,7 +337,7 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		service.wake(env.ID, env)
 
 	case "ADMIN_EXIT":
-		// Reply first so the client doesn't hang, then terminate asynchronously.
+		// reply first so the client doesnt hang, then terminate async.
 		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "ADMIN_EXIT_OK"})
 
 		go func() {
@@ -338,6 +351,23 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 			_ = p.Signal(syscall.SIGTERM)
 		}()
 	case "ADMIN_EXIT_OK":
+		service.wake(env.ID, env)
+
+	case "ADMIN_FORGET":
+		var key [20]byte
+		if len(env.Payload) >= 20 {
+			copy(key[:], env.Payload[:20])
+		}
+		ok := false
+		if service.OnAdminForget != nil {
+			ok = service.OnAdminForget(key)
+		}
+		typ := "ADMIN_FORGET_OK"
+		if !ok { /* still OK to reply OK */
+		}
+		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: typ})
+
+	case "ADMIN_FORGET_OK":
 		service.wake(env.ID, env)
 
 	default:

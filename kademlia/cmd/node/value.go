@@ -5,8 +5,10 @@ import (
 )
 
 type Value struct {
-	Data      []byte
-	ExpiresAt time.Time
+	Data        []byte
+	Origin      bool
+	LastPublish time.Time
+	ExpiresAt   time.Time
 }
 
 func NewValue(data []byte, ttl time.Duration) (Value, error) {

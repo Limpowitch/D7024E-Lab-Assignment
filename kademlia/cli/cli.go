@@ -25,6 +25,8 @@ func Run(args []string) error {
 		return nil
 	case "exit":
 		return cmdExit(args[1:])
+	case "forget":
+		return cmdForget(args[1:])
 	default:
 		usage()
 		return fmt.Errorf("unknown command %q", args[0])

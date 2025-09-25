@@ -61,6 +61,22 @@ func NewNode(bind string, adv string) (*Node, error) {
 		adv:          adv,
 	}
 
+	n.Svc.OnAdminForget = func(key [20]byte) bool {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+		v, ok := n.Store[string(key[:])]
+		if !ok {
+			return false
+		}
+		v.Origin = false
+
+		// delete local copy (this was not stated but it feels like the logical approach)
+		delete(n.Store, string(key[:]))
+
+		n.Store[string(key[:])] = v
+		return true
+	}
+
 	n.Svc.OnExit = func() {
 		// need to unblock signal is serve. so we self signal:
 		p, _ := os.FindProcess(os.Getpid())

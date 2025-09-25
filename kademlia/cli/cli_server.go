@@ -64,7 +64,40 @@ func cmdServe(args []string) error {
 	return n.Close()
 }
 
-// in cli_server.go
+func cmdForget(args []string) error {
+	fs := flag.NewFlagSet("forget", flag.ContinueOnError)
+	to := fs.String("to", "127.0.0.1:9999", "address of local daemon")
+	bind := fs.String("bind", ":0", "local bind for the client")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: forget <keyhex>")
+	}
+
+	keyb, err := hex.DecodeString(fs.Arg(0))
+	if err != nil || len(keyb) != 20 {
+		return errors.New("bad key (need 40 hex chars)")
+	}
+	var key [20]byte
+	copy(key[:], keyb)
+
+	n, err := node.NewNode(*bind, "")
+	if err != nil {
+		return err
+	}
+	n.Start()
+	defer n.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := n.Svc.AdminForget(ctx, *to, key); err != nil {
+		return err
+	}
+	fmt.Println("ok")
+	return nil
+}
+
 func cmdExit(args []string) error {
 	fs := flag.NewFlagSet("exit", flag.ContinueOnError)
 	to := fs.String("to", "127.0.0.1:9999", "address of local daemon")
@@ -73,7 +106,6 @@ func cmdExit(args []string) error {
 		return err
 	}
 
-	// tiny client node bound to :0
 	n, err := node.NewNode(*bind, "")
 	if err != nil {
 		return err
