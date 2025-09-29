@@ -23,12 +23,21 @@ type Node struct {
 	Store        map[string]Value
 	Svc          *service.Service
 	adv          string
+	ttl          time.Duration // how long values live
+	refreshEvery time.Duration // how often origin republisher runs
 
 	mu sync.RWMutex
 }
 
 // Creates a new node
-func NewNode(bind string, adv string) (*Node, error) {
+func NewNode(bind string, adv string, ttl time.Duration, refreshEvery time.Duration) (*Node, error) {
+	if refreshEvery <= 0 {
+		refreshEvery = ttl / 2
+		if refreshEvery <= 0 {
+			refreshEvery = 30 * time.Second // should be a safe floor (for demos at least)
+		}
+	}
+
 	// generate a random 160-bit node ID
 	var id [20]byte
 	if _, err := rand.Read(id[:]); err != nil {
@@ -59,21 +68,26 @@ func NewNode(bind string, adv string) (*Node, error) {
 		Store:        make(map[string]Value),
 		Svc:          svc,
 		adv:          adv,
+		ttl:          ttl,
+		refreshEvery: refreshEvery,
+	}
+
+	n.Svc.OnRefresh = func(key [20]byte) {
+		n.mu.Lock()
+		if v, ok := n.Store[string(key[:])]; ok {
+			v.ExpiresAt = time.Now().Add(n.ttl)
+			n.Store[string(key[:])] = v
+		}
+		n.mu.Unlock()
 	}
 
 	n.Svc.OnAdminForget = func(key [20]byte) bool {
 		n.mu.Lock()
 		defer n.mu.Unlock()
-		v, ok := n.Store[string(key[:])]
-		if !ok {
+		if _, ok := n.Store[string(key[:])]; !ok {
 			return false
 		}
-		v.Origin = false
-
-		// delete local copy (this was not stated but it feels like the logical approach)
 		delete(n.Store, string(key[:]))
-
-		n.Store[string(key[:])] = v
 		return true
 	}
 
@@ -86,38 +100,45 @@ func NewNode(bind string, adv string) (*Node, error) {
 	// ADMIN_PUT: compute key, do lookup(key), store to K closest, return key.
 	n.Svc.OnAdminPut = func(value []byte) ([20]byte, error) {
 		key := SHA1ID(value)
-
-		// Populate RT around key (uses your iterative FindNode walk)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_, _ = n.LookupNode(ctx, key)
 
-		// Fan-out STORE to K closest we currently know
 		cs := n.RoutingTable.Closest(key, K)
-
-		log.Printf("[admin-put] key=%x K=%d closest=%d", key[:4], K, len(cs))
-
 		if len(cs) == 0 {
-			// Still allow storing locally (optionally), but Kademlia usually wants at least some peers.
-			// Store locally for demo ergonomics:
 			n.mu.Lock()
-			n.Store[string(key[:])] = Value{Data: append([]byte(nil), value...)}
+			n.Store[string(key[:])] = Value{
+				Data:        append([]byte(nil), value...),
+				Origin:      true,
+				LastPublish: time.Now(),
+				ExpiresAt:   time.Now().Add(n.ttl),
+			}
 			n.mu.Unlock()
 			return key, nil
 		}
-		// Send STORE concurrently (best-effort)
+
 		var wg sync.WaitGroup
 		for _, c := range cs {
-			c := c
 			wg.Add(1)
-			go func() {
+			go func(addr string) {
 				defer wg.Done()
 				ctx2, cancel2 := context.WithTimeout(context.Background(), 800*time.Millisecond)
-				_ = n.Svc.Store(ctx2, c.Addr, key, value)
+				_ = n.Svc.Store(ctx2, addr, key, value)
 				cancel2()
-			}()
+			}(c.Addr)
 		}
 		wg.Wait()
+
+		// keep a local origin copy too (optional but convenient)
+		n.mu.Lock()
+		n.Store[string(key[:])] = Value{
+			Data:        append([]byte(nil), value...),
+			Origin:      true,
+			LastPublish: time.Now(),
+			ExpiresAt:   time.Now().Add(n.ttl),
+		}
+		n.mu.Unlock()
+
 		return key, nil
 	}
 
@@ -181,29 +202,73 @@ func NewNode(bind string, adv string) (*Node, error) {
 
 	n.Svc.OnStore = func(key [20]byte, val []byte) {
 		n.mu.Lock()
-		n.Store[string(key[:])] = Value{Data: append([]byte(nil), val...)} // copy for safety
+		n.Store[string(key[:])] = Value{
+			Data:      append([]byte(nil), val...),
+			ExpiresAt: time.Now().Add(n.ttl),
+		}
 		n.mu.Unlock()
-
 		log.Printf("[node] STORED key=%x len=%d at %s", key[:], len(val), n.Svc.Addr())
 	}
 
-	n.Svc.OnFindValue = func(key [20]byte) (val []byte, contactsPayload []byte) {
+	n.Svc.OnFindValue = func(key [20]byte) ([]byte, []byte) {
 		n.mu.RLock()
 		v, ok := n.Store[string(key[:])]
 		n.mu.RUnlock()
 		if ok {
-			// DEBUG
-			log.Printf("[node] FIND_VALUE HIT key=%x at %s", key[:], n.Svc.Addr())
+			n.mu.Lock()
+			v.ExpiresAt = time.Now().Add(n.ttl)
+			n.Store[string(key[:])] = v
+			n.mu.Unlock()
 			return append([]byte(nil), v.Data...), nil
 		}
 		cs := n.RoutingTable.Closest(key, K)
-		// DEBUG
-		log.Printf("[node] FIND_VALUE MISS key=%x returning %d contacts at %s",
-			key[:], len(cs), n.Svc.Addr())
 		return nil, MarshalContactList(cs)
 	}
 
 	return n, nil
+}
+
+func (n *Node) startRepublisher() {
+	tick := time.NewTicker(n.refreshEvery)
+	go func() {
+		for range tick.C {
+			now := time.Now()
+			var keys [][20]byte
+			n.mu.RLock()
+			for kStr, v := range n.Store {
+				if !v.Origin {
+					continue
+				}
+				if v.LastPublish.IsZero() || now.Sub(v.LastPublish) >= n.refreshEvery {
+					var key [20]byte
+					copy(key[:], []byte(kStr)[:20])
+					keys = append(keys, key)
+				}
+			}
+			n.mu.RUnlock()
+
+			for _, key := range keys {
+				cs := n.RoutingTable.Closest(key, K)
+				var wg sync.WaitGroup
+				for _, c := range cs {
+					wg.Add(1)
+					go func(addr string, key [20]byte) {
+						defer wg.Done()
+						ctx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
+						_ = n.Svc.Refresh(ctx, addr, key)
+						cancel()
+					}(c.Addr, key)
+				}
+				wg.Wait()
+
+				n.mu.Lock()
+				v := n.Store[string(key[:])]
+				v.LastPublish = now
+				n.Store[string(key[:])] = v
+				n.mu.Unlock()
+			}
+		}
+	}()
 }
 
 // Returns the adress thats being advertised to other nodes
@@ -227,6 +292,24 @@ func (n *Node) FindNode(to string, target [20]byte) ([]Contact, error) {
 
 // Starts the service and bootstraps the node
 func (n *Node) Start() {
+	// GC ticker (U1)
+	gc := time.NewTicker(1 * time.Minute)
+	go func() {
+		for range gc.C {
+			now := time.Now()
+			n.mu.Lock()
+			for k, v := range n.Store {
+				if !v.ExpiresAt.IsZero() && now.After(v.ExpiresAt) {
+					delete(n.Store, k)
+				}
+			}
+			n.mu.Unlock()
+		}
+	}()
+
+	// Republisher ticker (U2)
+	n.startRepublisher()
+
 	n.Svc.Start()
 	go n.bootstrap()
 }

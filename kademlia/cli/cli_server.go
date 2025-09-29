@@ -18,7 +18,8 @@ import (
 
 func cmdServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-
+	ttlStr := fs.String("ttl", "24h", "TTL for stored values (e.g. 30s, 10m, 24h)")
+	refreshStr := fs.String("refresh", "", "Refresh interval for origin (default: ttl/2)")
 	bind := fs.String("bind", "0.0.0.0:9999", "UDP bind address")
 	seeds := fs.String("seeds", "", "comma-separated bootstrap peers host:port")
 	adv := fs.String("adv", "", "advertised addr host:port")
@@ -26,7 +27,20 @@ func cmdServe(args []string) error {
 		return err
 	}
 
-	n, err := node.NewNode(*bind, *adv) // <— pass adv
+	ttl, err := time.ParseDuration(*ttlStr)
+	if err != nil {
+		return fmt.Errorf("bad -ttl: %w", err)
+	}
+
+	var refresh time.Duration
+	if *refreshStr != "" {
+		refresh, err = time.ParseDuration(*refreshStr)
+		if err != nil {
+			return fmt.Errorf("bad -refresh: %w", err)
+		}
+	}
+
+	n, err := node.NewNode(*bind, *adv, ttl, refresh)
 	if err != nil {
 		return err
 	}
@@ -82,7 +96,7 @@ func cmdForget(args []string) error {
 	var key [20]byte
 	copy(key[:], keyb)
 
-	n, err := node.NewNode(*bind, "")
+	n, err := node.NewNode(*bind, "", 24*time.Hour, 0)
 	if err != nil {
 		return err
 	}
@@ -106,7 +120,7 @@ func cmdExit(args []string) error {
 		return err
 	}
 
-	n, err := node.NewNode(*bind, "")
+	n, err := node.NewNode(*bind, "", 24*time.Hour, 0)
 	if err != nil {
 		return err
 	}
@@ -137,7 +151,7 @@ func cmdLocalPut(args []string) error {
 	}
 
 	// small client node just to send the admin RPC:
-	n, err := node.NewNode(*bind, "")
+	n, err := node.NewNode(*bind, "", 24*time.Hour, 0)
 	if err != nil {
 		return err
 	}
@@ -173,7 +187,8 @@ func cmdLocalGet(args []string) error {
 	copy(key[:], keyb)
 
 	// client binds :0 (DO NOT BIND :9999)
-	n, err := node.NewNode(":0", "")
+	//n, err := node.NewNode(":0", "")
+	n, err := node.NewNode(":0", "", 24*time.Hour, 0)
 	if err != nil {
 		return err
 	}
@@ -206,7 +221,7 @@ func cmdRT(args []string) error {
 		return err
 	}
 
-	n, err := node.NewNode(*bind, "")
+	n, err := node.NewNode(*bind, "", 24*time.Hour, 0)
 	if err != nil {
 		return err
 	}

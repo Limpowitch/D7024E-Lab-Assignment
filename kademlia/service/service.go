@@ -44,6 +44,7 @@ type Service struct {
 	OnAdminPut    func(value []byte) (key [20]byte, err error)
 	OnAdminGet    func(ctx context.Context, key [20]byte) (value []byte, ok bool)
 	OnAdminForget func(key [20]byte) bool
+	OnRefresh     func(key [20]byte)
 }
 
 // Creates a new Service listening on bind (UDP addr) and identifying as selfID
@@ -87,6 +88,18 @@ func (s *Service) AdminForget(ctx context.Context, to string, key [20]byte) erro
 	}
 	if resp.Type != "ADMIN_FORGET_OK" {
 		return errors.New("bad ADMIN_FORGET response: " + resp.Type)
+	}
+	return nil
+}
+
+func (s *Service) Refresh(ctx context.Context, to string, key [20]byte) error {
+	req := wire.Envelope{ID: wire.NewRPCID(), Type: "REFRESH", Payload: key[:]}
+	resp, err := s.sendAndWait(ctx, to, req)
+	if err != nil {
+		return err
+	}
+	if resp.Type != "REFRESH_ACK" {
+		return errors.New("bad REFRESH response: " + resp.Type)
 	}
 	return nil
 }
@@ -368,6 +381,16 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: typ})
 
 	case "ADMIN_FORGET_OK":
+		service.wake(env.ID, env)
+	case "REFRESH":
+		var key [20]byte
+		if len(env.Payload) >= 20 {
+			copy(key[:], env.Payload[:20])
+		}
+		// reset TTL if we have it
+		service.OnRefresh(key) // callback set by node
+		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "REFRESH_ACK"})
+	case "REFRESH_ACK":
 		service.wake(env.ID, env)
 
 	default:

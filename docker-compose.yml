@@ -17,12 +17,12 @@
 services:
   seed:
     image: kadlab:latest
-    command: ["serve","-bind","0.0.0.0:9999","-adv","seed:9999"]
+    command: ["serve","-bind","0.0.0.0:9999","-adv","seed:9999","-ttl","30s","-refresh","15s"]
     networks: [kadnet]
 
   node:
     image: kadlab:latest
-    command: ["serve","-bind","0.0.0.0:9999","-seeds","seed:9999","-adv","${HOSTNAME}:9999"]
+    command: ["serve","-bind","0.0.0.0:9999","-seeds","seed:9999","-adv","${HOSTNAME}:9999","-ttl","30s","-refresh","15s"]
     networks: [kadnet]
 
 networks:
