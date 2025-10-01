@@ -18,7 +18,7 @@ func TestStore_RoundTrip(t *testing.T) {
 	var gotKey [20]byte
 	var gotVal []byte
 	done := make(chan struct{}, 1)
-	b.OnStore = func(k [20]byte, v []byte) { gotKey = k; gotVal = append([]byte(nil), v...); done <- struct{}{} }
+	b.SetOnStore(func(k [20]byte, v []byte) { gotKey = k; gotVal = append([]byte(nil), v...); done <- struct{}{} })
 
 	key := [20]byte{1, 2, 3}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

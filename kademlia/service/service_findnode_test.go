@@ -28,10 +28,10 @@ func TestFindNode_RoundTrip(t *testing.T) {
 	// Whatever bytes you want—service layer treats it as opaque payload.
 	want := []byte{0x00, 0x02, 'x', ':', '1', 'y', ':', '2'}
 
-	b.OnFindNode = func(target [20]byte) []byte {
+	b.SetOnFindNode(func(target [20]byte) []byte {
 		// We could assert target is 20 bytes here if we wanted.
 		return want
-	}
+	})
 
 	b.Start()
 

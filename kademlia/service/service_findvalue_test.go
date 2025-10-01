@@ -18,12 +18,13 @@ func TestFindValue_ValueAndContacts(t *testing.T) {
 	key := [20]byte{9, 9}
 
 	// value case
-	b.OnFindValue = func(k [20]byte) ([]byte, []byte) {
+	b.SetOnFindValue(func(k [20]byte) ([]byte, []byte) {
 		if k == key {
 			return []byte("V"), nil
 		}
 		return nil, nil
-	}
+	})
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	res, err := a.FindValue(ctx, b.Addr(), key)
@@ -32,9 +33,9 @@ func TestFindValue_ValueAndContacts(t *testing.T) {
 	}
 
 	// contacts case
-	b.OnFindValue = func(k [20]byte) ([]byte, []byte) {
+	b.SetOnFindValue(func(k [20]byte) ([]byte, []byte) {
 		return nil, []byte{0x00, 0x00} // your encoding: an empty contact list
-	}
+	})
 	res2, err := a.FindValue(ctx, b.Addr(), key)
 	if err != nil || res2.Value != nil || len(res2.Contacts) == 0 {
 		t.Fatalf("contacts path: %+v %v", res2, err)
