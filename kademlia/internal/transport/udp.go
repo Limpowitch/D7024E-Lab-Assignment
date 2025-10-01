@@ -52,12 +52,16 @@ func (server *UDPServer) Start() {
 			if err != nil {
 				return
 			}
-			//env, err := wire.Unmarshal(buf[:n])
 
-			env, err := wire.Unmarshal(buf[:n])
-			if err == nil && server.handler != nil {
-				server.handler(from.(*net.UDPAddr), env)
+			// Make a fresh copy so this packet is immutable for the handler.
+			pkt := make([]byte, n)
+			copy(pkt, buf[:n])
+
+			env, err := wire.Unmarshal(pkt)
+			if err != nil || server.handler == nil {
+				continue
 			}
+			server.handler(from.(*net.UDPAddr), env)
 		}
 	}()
 }

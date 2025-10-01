@@ -465,6 +465,8 @@ func (s *Service) AdminGet(ctx context.Context, to string, key [20]byte) ([]byte
 	binary.BigEndian.PutUint32(payload[20:], timeoutMs)
 
 	req := wire.Envelope{ID: wire.NewRPCID(), Type: "ADMIN_GET", Payload: payload}
+	log.Printf("[admin-get/cli] send key=%x", key[:4])
+
 	resp, err := s.sendAndWait(ctx, to, req)
 	if err != nil {
 		return nil, false, err
@@ -530,7 +532,7 @@ func (service *Service) handleAdminGet(from *net.UDPAddr, env wire.Envelope) {
 
 	var key [20]byte
 	copy(key[:], env.Payload[:20])
-
+	log.Printf("[admin-get/srv] recv key=%x from=%s", key[:4], from.String())
 	// derive timeout from client payload (or default)
 	timeoutMs := uint32(10000)
 	if len(env.Payload) >= 24 {
