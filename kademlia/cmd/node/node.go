@@ -72,16 +72,16 @@ func NewNode(bind string, adv string, ttl time.Duration, refreshEvery time.Durat
 		refreshEvery: refreshEvery,
 	}
 
-	n.Svc.OnRefresh = func(key [20]byte) {
+	n.Svc.SetOnRefresh(func(key [20]byte) {
 		n.mu.Lock()
 		if v, ok := n.Store[string(key[:])]; ok {
 			v.ExpiresAt = time.Now().Add(n.ttl)
 			n.Store[string(key[:])] = v
 		}
 		n.mu.Unlock()
-	}
+	})
 
-	n.Svc.OnAdminForget = func(key [20]byte) bool {
+	n.Svc.SetOnAdminForget(func(key [20]byte) bool {
 		n.mu.Lock()
 		defer n.mu.Unlock()
 		if _, ok := n.Store[string(key[:])]; !ok {
@@ -89,16 +89,16 @@ func NewNode(bind string, adv string, ttl time.Duration, refreshEvery time.Durat
 		}
 		delete(n.Store, string(key[:]))
 		return true
-	}
+	})
 
-	n.Svc.OnExit = func() {
+	n.Svc.SetOnExit(func() {
 		// need to unblock signal is serve. so we self signal:
 		p, _ := os.FindProcess(os.Getpid())
 		_ = p.Signal(syscall.SIGTERM)
-	}
+	})
 
 	// ADMIN_PUT: compute key, do lookup(key), store to K closest, return key.
-	n.Svc.OnAdminPut = func(value []byte) ([20]byte, error) {
+	n.Svc.SetOnAdminPut(func(value []byte) ([20]byte, error) {
 		key := SHA1ID(value)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -140,11 +140,11 @@ func NewNode(bind string, adv string, ttl time.Duration, refreshEvery time.Durat
 		n.mu.Unlock()
 
 		return key, nil
-	}
+	})
 
 	// ADMIN_GET: iterative get using our RT (and any seeds already known).
 	// node/node.go (inside NewNode)
-	n.Svc.OnAdminGet = func(ctx context.Context, key [20]byte) ([]byte, bool) {
+	n.Svc.SetOnAdminGet(func(ctx context.Context, key [20]byte) ([]byte, bool) {
 		// Local fast path
 		n.mu.RLock()
 		if v, ok := n.Store[string(key[:])]; ok && len(v.Data) > 0 {
@@ -162,10 +162,10 @@ func NewNode(bind string, adv string, ttl time.Duration, refreshEvery time.Durat
 		// Optional: log for clarity — you already have similar logs.
 		// log.Printf("[admin-get] MISS err=%v", err)
 		return nil, false
-	}
+	})
 
 	// node/node.go (inside NewNode after n.Svc is created)
-	n.Svc.OnDumpRT = func() []byte {
+	n.Svc.SetOnDumpRT(func() []byte {
 		var all []Contact
 		n.RoutingTable.mu.RLock()
 		for _, b := range n.RoutingTable.BucketList {
@@ -175,17 +175,17 @@ func NewNode(bind string, adv string, ttl time.Duration, refreshEvery time.Durat
 		}
 		n.RoutingTable.mu.RUnlock()
 		return MarshalContactList(all) // node’s own marshal
-	}
+	})
 
 	// when we learn another nodes id (from ping i guess?) we update our routing table. done here initially
-	n.Svc.OnSeen = func(addr string, peerID [20]byte) {
+	n.Svc.SetOnSeen(func(addr string, peerID [20]byte) {
 		if !isZero(peerID) {
 			n.RoutingTable.Update(Contact{ID: peerID, Addr: addr})
 		}
-	}
+	})
 
 	// when asked FIND_NODE we reply with k closest from our own routing table
-	n.Svc.OnFindNode = func(target [20]byte) []byte {
+	n.Svc.SetOnFindNode(func(target [20]byte) []byte {
 		// start with our own contact so callers learn at least one node
 		self := Contact{ID: n.NodeID, Addr: n.AdvertisedAddr()}
 		cs := n.RoutingTable.Closest(target, K)
@@ -198,9 +198,9 @@ func NewNode(bind string, adv string, ttl time.Duration, refreshEvery time.Durat
 			}
 		}
 		return MarshalContactList(out)
-	}
+	})
 
-	n.Svc.OnStore = func(key [20]byte, val []byte) {
+	n.Svc.SetOnStore(func(key [20]byte, val []byte) {
 		n.mu.Lock()
 		n.Store[string(key[:])] = Value{
 			Data:      append([]byte(nil), val...),
@@ -208,9 +208,9 @@ func NewNode(bind string, adv string, ttl time.Duration, refreshEvery time.Durat
 		}
 		n.mu.Unlock()
 		log.Printf("[node] STORED key=%x len=%d at %s", key[:], len(val), n.Svc.Addr())
-	}
+	})
 
-	n.Svc.OnFindValue = func(key [20]byte) ([]byte, []byte) {
+	n.Svc.SetOnFindValue(func(key [20]byte) ([]byte, []byte) {
 		n.mu.RLock()
 		v, ok := n.Store[string(key[:])]
 		n.mu.RUnlock()
@@ -223,7 +223,7 @@ func NewNode(bind string, adv string, ttl time.Duration, refreshEvery time.Durat
 		}
 		cs := n.RoutingTable.Closest(key, K)
 		return nil, MarshalContactList(cs)
-	}
+	})
 
 	return n, nil
 }
