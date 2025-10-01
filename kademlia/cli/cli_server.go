@@ -7,14 +7,44 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/api"
 	"github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/cmd/node"
 )
+
+type objectNodeAdapter struct{ n *node.Node }
+
+// Store by calling the node's own admin API (loopback).
+func (a objectNodeAdapter) HandleStore(_ [20]byte, data []byte, _ time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err := a.n.Svc.AdminPut(ctx, a.n.Svc.Addr(), data)
+	return err
+}
+
+func (a objectNodeAdapter) LookupValue(hexKey string) ([]byte, bool) {
+	b, err := hex.DecodeString(hexKey)
+	if err != nil || len(b) != 20 {
+		return nil, false
+	}
+	var key [20]byte
+	copy(key[:], b)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	val, ok, err := a.n.Svc.AdminGet(ctx, a.n.Svc.Addr(), key)
+	if err != nil || !ok {
+		return nil, false
+	}
+	return val, true
+}
 
 func cmdServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
@@ -23,6 +53,8 @@ func cmdServe(args []string) error {
 	bind := fs.String("bind", "0.0.0.0:9999", "UDP bind address")
 	seeds := fs.String("seeds", "", "comma-separated bootstrap peers host:port")
 	adv := fs.String("adv", "", "advertised addr host:port")
+	httpBind := fs.String("http", ":8080", "REST API bind") // <-- add this
+
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -44,6 +76,20 @@ func cmdServe(args []string) error {
 	if err != nil {
 		return err
 	}
+
+	adapter := objectNodeAdapter{n: n}
+	mux := http.NewServeMux()
+
+	mux.Handle("/objects", api.NewObjectsMux(adapter))  // POST /objects
+	mux.Handle("/objects/", api.NewObjectsMux(adapter)) // GET  /objects/{hash}
+
+	go func() {
+		log.Printf("REST listening on %s", *httpBind)
+		if err := http.ListenAndServe(*httpBind, mux); err != nil {
+			log.Printf("http server stopped: %v", err)
+		}
+	}()
+
 	n.Start()
 	fmt.Println("node listening on", n.Svc.Addr())
 

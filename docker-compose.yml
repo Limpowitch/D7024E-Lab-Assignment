@@ -17,13 +17,17 @@
 services:
   seed:
     image: kadlab:latest
-    command: ["serve","-bind","0.0.0.0:9999","-adv","seed:9999","-ttl","30s","-refresh","15s"]
+    command: ["serve","-bind","0.0.0.0:9999","-adv","seed:9999","-ttl","30s","-refresh","15s","-http",":8080"]
     networks: [kadnet]
+    ports:
+      - "18080:8080"   # publish REST
 
   node:
     image: kadlab:latest
-    command: ["serve","-bind","0.0.0.0:9999","-seeds","seed:9999","-adv","${HOSTNAME}:9999","-ttl","30s","-refresh","15s"]
+    command: ["serve","-bind","0.0.0.0:9999","-seeds","seed:9999","-adv","${HOSTNAME}:9999","-ttl","30s","-refresh","15s","-http",":8080"]
     networks: [kadnet]
+    ports:
+      - "8080"    
 
 networks:
   kadnet:
