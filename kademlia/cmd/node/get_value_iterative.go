@@ -28,7 +28,7 @@ func (n *Node) GetValueIterative(ctx context.Context, key [20]byte, seeds []Cont
 		// filter bad/self addrs
 		tmp := batch[:0]
 		for _, c := range batch {
-			if c.ID == n.NodeID || c.Addr == "" || c.Addr[0] == ':' {
+			if c.ID == n.NodeID || c.Addr == "" || c.Addr[0] == ':' || c.Addr == n.Svc.Addr() {
 				continue
 			}
 			tmp = append(tmp, c)

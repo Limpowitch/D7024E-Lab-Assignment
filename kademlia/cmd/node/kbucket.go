@@ -26,12 +26,11 @@ func NewKBucket(k int, lower, upper [20]byte, collection []Contact, b_val int) (
 	}, nil
 }
 
-// Adds a contact to the kbucket. Probably dont need this
-// func (kb *Kbucket) AddToKBucket(id Contact) { // We simply append here, no capacity check needed (will be handled elsewere)
-// 	kb.mu.Lock()
-// 	defer kb.mu.Unlock()
-// 	kb.Contacts = append(kb.Contacts, id)
-// }
+func (kb *Kbucket) AddToKBucket(id Contact) { // We simply append here, no capacity check needed (will be handled elsewere)
+	kb.mu.Lock()
+	defer kb.mu.Unlock()
+	kb.Contacts = append(kb.Contacts, id)
+}
 
 // Removes a contact from the kbucket
 func (kb *Kbucket) RemoveFromKBucket(c Contact) error {

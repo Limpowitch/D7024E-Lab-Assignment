@@ -32,6 +32,8 @@ type Service struct {
 	mu      sync.Mutex
 	waiters map[wire.RPCID]chan wire.Envelope
 
+	hmu sync.RWMutex
+
 	SelfID      [20]byte
 	OnSeen      SeenHook //just call this when we learn another nodes id
 	SelfAddr    string
@@ -222,8 +224,11 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		var pid [20]byte
 		if len(env.Payload) >= 20 {
 			copy(pid[:], env.Payload[:20])
-			if service.OnSeen != nil {
-				service.OnSeen(from.String(), pid)
+			service.hmu.RLock()
+			OnSeen := service.OnSeen
+			service.hmu.RUnlock()
+			if OnSeen != nil {
+				OnSeen(from.String(), pid)
 			}
 		}
 		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "PONG", Payload: service.SelfID[:]})
@@ -232,8 +237,11 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		var pid [20]byte
 		if len(env.Payload) >= 20 {
 			copy(pid[:], env.Payload[:20])
-			if service.OnSeen != nil {
-				service.OnSeen(from.String(), pid)
+			service.hmu.RLock()
+			OnSeen := service.OnSeen
+			service.hmu.RUnlock()
+			if OnSeen != nil {
+				OnSeen(from.String(), pid)
 			}
 		}
 
@@ -247,8 +255,11 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 			copy(target[:], env.Payload[:20])
 		}
 		var payload []byte
-		if service.OnFindNode != nil {
-			payload = service.OnFindNode(target) // already encoded contact list
+		service.hmu.RLock()
+		OnFindNode := service.OnFindNode
+		service.hmu.RUnlock()
+		if OnFindNode != nil {
+			payload = OnFindNode(target) // already encoded contact list
 		}
 		_ = service.udp.Reply(from, wire.Envelope{
 			ID:      env.ID,
@@ -276,9 +287,11 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		}
 		val := make([]byte, l)
 		copy(val, env.Payload[22:22+l])
-
-		if service.OnStore != nil {
-			service.OnStore(key, val)
+		service.hmu.RLock()
+		OnStore := service.OnStore
+		service.hmu.RUnlock()
+		if OnStore != nil {
+			OnStore(key, val)
 		}
 		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "STORE_ACK"})
 
@@ -297,8 +310,11 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		var reply wire.Envelope
 		reply.ID = env.ID
 
-		if service.OnFindValue != nil {
-			val, contactsPayload := service.OnFindValue(key)
+		service.hmu.RLock()
+		OnFindValue := service.OnFindValue
+		service.hmu.RUnlock()
+		if OnFindValue != nil {
+			val, contactsPayload := OnFindValue(key)
 			if val != nil {
 				reply.Type = "FIND_VALUE_VAL"
 				reply.Payload = val
@@ -323,8 +339,11 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		service.wake(env.ID, env)
 	case "ADMIN_RT":
 		var pl []byte
-		if service.OnDumpRT != nil {
-			pl = service.OnDumpRT()
+		service.hmu.RLock()
+		OnDumpRT := service.OnDumpRT
+		service.hmu.RUnlock()
+		if OnDumpRT != nil {
+			pl = OnDumpRT()
 		}
 		_ = service.udp.Reply(from, wire.Envelope{
 			ID:      env.ID,
@@ -355,8 +374,11 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 
 		go func() {
 			// If the node installed a hook, call it; otherwise self-signal.
-			if service.OnExit != nil {
-				service.OnExit()
+			service.hmu.RLock()
+			OnExit := service.OnExit
+			service.hmu.RUnlock()
+			if OnExit != nil {
+				OnExit()
 				return
 			}
 			// Default: self-signal to unblock waitForSignal() in cmdServe
@@ -372,8 +394,11 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 			copy(key[:], env.Payload[:20])
 		}
 		ok := false
-		if service.OnAdminForget != nil {
-			ok = service.OnAdminForget(key)
+		service.hmu.RLock()
+		OnAdminForget := service.OnAdminForget
+		service.hmu.RUnlock()
+		if OnAdminForget != nil {
+			ok = OnAdminForget(key)
 		}
 		typ := "ADMIN_FORGET_OK"
 		if !ok { /* still OK to reply OK */
@@ -387,9 +412,14 @@ func (service *Service) onPacket(from *net.UDPAddr, env wire.Envelope) {
 		if len(env.Payload) >= 20 {
 			copy(key[:], env.Payload[:20])
 		}
-		// reset TTL if we have it
-		service.OnRefresh(key) // callback set by node
+		service.hmu.RLock()
+		onRefresh := service.OnRefresh
+		service.hmu.RUnlock()
+		if onRefresh != nil {
+			onRefresh(key)
+		}
 		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "REFRESH_ACK"})
+
 	case "REFRESH_ACK":
 		service.wake(env.ID, env)
 
@@ -435,6 +465,8 @@ func (s *Service) AdminGet(ctx context.Context, to string, key [20]byte) ([]byte
 	binary.BigEndian.PutUint32(payload[20:], timeoutMs)
 
 	req := wire.Envelope{ID: wire.NewRPCID(), Type: "ADMIN_GET", Payload: payload}
+	log.Printf("[admin-get/cli] send key=%x", key[:4])
+
 	resp, err := s.sendAndWait(ctx, to, req)
 	if err != nil {
 		return nil, false, err
@@ -471,6 +503,10 @@ func (s *Service) wake(id wire.RPCID, env wire.Envelope) {
 // Handles an incoming ADMIN_PUT request
 func (service *Service) handleAdminPut(from *net.UDPAddr, env wire.Envelope) {
 	log.Printf("[service] ADMIN_PUT from %s", from.String())
+
+	service.hmu.RLock()
+	OnAdminPut := service.OnAdminPut
+	service.hmu.RUnlock()
 	if service.OnAdminPut == nil {
 		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "ADMIN_PUT_RESP"})
 		return
@@ -478,7 +514,10 @@ func (service *Service) handleAdminPut(from *net.UDPAddr, env wire.Envelope) {
 
 	val := append([]byte(nil), env.Payload...)
 
-	key, err := service.OnAdminPut(val)
+	// service.hmu.RLock()
+	// OnAdminPut := service.OnAdminPut
+	// service.hmu.RUnlock()
+	key, err := OnAdminPut(val)
 	if err != nil {
 		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "ADMIN_PUT_RESP"})
 		return
@@ -499,7 +538,7 @@ func (service *Service) handleAdminGet(from *net.UDPAddr, env wire.Envelope) {
 
 	var key [20]byte
 	copy(key[:], env.Payload[:20])
-
+	log.Printf("[admin-get/srv] recv key=%x from=%s", key[:4], from.String())
 	// derive timeout from client payload (or default)
 	timeoutMs := uint32(10000)
 	if len(env.Payload) >= 24 {
@@ -511,12 +550,15 @@ func (service *Service) handleAdminGet(from *net.UDPAddr, env wire.Envelope) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
 
-	if service.OnAdminGet == nil {
+	service.hmu.RLock()
+	OnAdminGet := service.OnAdminGet
+	service.hmu.RUnlock()
+	if OnAdminGet == nil {
 		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "ADMIN_GET_NOTFOUND"})
 		return
 	}
 
-	val, ok := service.OnAdminGet(ctx, key)
+	val, ok := OnAdminGet(ctx, key)
 	if ok {
 		log.Printf("[admin-get] FOUND -> replying ADMIN_GET_VAL with value=%q len=%d", string(val), len(val))
 		_ = service.udp.Reply(from, wire.Envelope{ID: env.ID, Type: "ADMIN_GET_VAL", Payload: val})

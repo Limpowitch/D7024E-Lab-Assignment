@@ -2,27 +2,45 @@ package wire
 
 import (
 	"crypto/rand"
+	"encoding/binary"
 	"errors"
+	"sync"
+	"sync/atomic"
+	"time"
 )
-
-// we need messages that travel over udp.
-// each message must carry the rpc id (160bit) so that req. and reply can be correlated
-// need to know message type
-// actual payload bytes (arbitrary size?)
-
-// envelope thoughts:
-
-// ========
-// 160-bit id
-// label, like ping, find_node, msg, etc.
-// actual message
-// ========
 
 const SizeOfID = 20
 
-type RPCID [SizeOfID]byte // follow the same principle as in 'node'
+type RPCID [SizeOfID]byte
 
-func NewRPCID() (id RPCID) { _, _ = rand.Read(id[:]); return } //useful for tests later
+var (
+	seedOnce   sync.Once
+	seedPrefix [12]byte
+	idCtr      uint64
+)
+
+func initSeeds() {
+	if _, err := rand.Read(seedPrefix[:]); err != nil {
+		panic("crypto/rand failed in wire.NewRPCID seed")
+	}
+	atomic.StoreUint64(&idCtr, uint64(time.Now().UnixNano()))
+}
+
+//   - 12 random bytes (per-process)  ||  8-byte big-endian counter
+//
+// we do this so that collisinos never happen
+func NewRPCID() RPCID {
+	seedOnce.Do(initSeeds)
+
+	n := atomic.AddUint64(&idCtr, 1)
+
+	var id RPCID
+	// prefix (12B)
+	copy(id[:12], seedPrefix[:])
+	// suffix counter (8B)
+	binary.BigEndian.PutUint64(id[12:], n)
+	return id
+}
 
 type Envelope struct {
 	ID      RPCID
@@ -50,11 +68,13 @@ func Unmarshal(b []byte) (Envelope, error) {
 	}
 	var id RPCID
 	copy(id[:], b[:SizeOfID])
+
 	typLen := int(b[SizeOfID])
 	if len(b) < SizeOfID+1+typLen {
 		return Envelope{}, errors.New("short type")
 	}
 	typ := string(b[SizeOfID+1 : SizeOfID+1+typLen])
 	pl := b[SizeOfID+1+typLen:]
+
 	return Envelope{ID: id, Type: typ, Payload: pl}, nil
 }
