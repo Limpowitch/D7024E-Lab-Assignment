@@ -13,7 +13,7 @@ import (
 	"github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/service"
 )
 
-const K = 20 // bucket size
+const K = 2 // bucket size
 
 // A Kademlia node
 type Node struct {
@@ -50,7 +50,10 @@ func NewNode(bind string, adv string, ttl time.Duration, refreshEvery time.Durat
 		upper[i] = 0xff
 	}
 
-	rt, err := NewRoutingTable(id, lower, upper)
+	/// IMPORTANT, HERE IS WHERE WE DECIDE OUR SPLIT METRIC
+	var b = 5
+
+	rt, err := NewRoutingTable(id, lower, upper, K, b)
 	if err != nil {
 		return nil, err
 	}

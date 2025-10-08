@@ -4,12 +4,24 @@ import (
 	"testing"
 )
 
-// helpers for readable 160-bit bounds (big-endian)
+/******** helpers ********/
+
+func zeroID() [20]byte { return [20]byte{} }
+
+func maxID() [20]byte {
+	var x [20]byte
+	for i := range x {
+		x[i] = 0xFF
+	}
+	return x
+}
+
 func idWithFirstByte(b byte) [20]byte {
 	var x [20]byte
 	x[0] = b
 	return x
 }
+
 func upperWithFirstByte(b byte) [20]byte {
 	var x [20]byte
 	x[0] = b
@@ -19,21 +31,24 @@ func upperWithFirstByte(b byte) [20]byte {
 	return x
 }
 
+func contactWithFirstByte(b byte, addr string) Contact {
+	return Contact{ID: idWithFirstByte(b), Addr: addr}
+}
+
+/******** tests ********/
+
 func TestNewRoutingTable_SingleFullRange(t *testing.T) {
 	var self [20]byte
+	lower := zeroID()
+	upper := maxID()
+	b := 2
+	K := 2
 
-	var lower [20]byte // 00..00
-	var upper [20]byte // FF..FF
-	for i := range upper {
-		upper[i] = 0xFF
-	}
-
-	rt, err := NewRoutingTable(self, lower, upper)
+	rt, err := NewRoutingTable(self, lower, upper, K, b)
 	if err != nil {
 		t.Fatalf("expected no error at NewRoutingTable, got %v", err)
 	}
 
-	// should start with exactly one full-range bucket
 	if len(rt.BucketList) != 1 {
 		t.Fatalf("expected 1 KBucket, got %d", len(rt.BucketList))
 	}
@@ -48,48 +63,39 @@ func TestNewRoutingTable_SingleFullRange(t *testing.T) {
 
 func TestRoutingTable_AddBucket_SortedInsertAndDuplicate(t *testing.T) {
 	var self [20]byte
+	lower := zeroID()
+	upper := maxID()
+	b := 2
+	K := 2
 
-	// Start with full range
-	var lower [20]byte
-	var upper [20]byte
-	for i := range upper {
-		upper[i] = 0xFF
-	}
-
-	rt, err := NewRoutingTable(self, lower, upper)
+	rt, err := NewRoutingTable(self, lower, upper, K, b)
 	if err != nil {
 		t.Fatalf("NewRoutingTable error: %v", err)
 	}
 
-	// Remove the full-range bucket so we can test non-overlapping inserts cleanly
+	// Remove initial full-range for a clean slate.
 	if err := rt.removeBucketLocked(rt.BucketList[0]); err != nil {
-		t.Fatalf("RemoveBucket (initial) failed: %v", err)
-	}
-	if len(rt.BucketList) != 0 {
-		t.Fatalf("expected 0 buckets after removal, got %d", len(rt.BucketList))
+		t.Fatalf("remove initial failed: %v", err)
 	}
 
-	// Create three disjoint buckets with out-of-order lowers to test sorted insertion
-	kbA, _ := NewKBucket(20, idWithFirstByte(0x80), upperWithFirstByte(0x80), nil) // [0x80.., 0x80..FF]
-	kbB, _ := NewKBucket(20, idWithFirstByte(0x00), upperWithFirstByte(0x3F), nil) // [0x00.., 0x3F..FF]
-	kbC, _ := NewKBucket(20, idWithFirstByte(0x40), upperWithFirstByte(0x7F), nil) // [0x40.., 0x7F..FF]
+	kbA, _ := NewKBucket(20, idWithFirstByte(0x80), upperWithFirstByte(0x80), nil, b)
+	kbB, _ := NewKBucket(20, idWithFirstByte(0x00), upperWithFirstByte(0x3F), nil, b)
+	kbC, _ := NewKBucket(20, idWithFirstByte(0x40), upperWithFirstByte(0x7F), nil, b)
 
-	// Insert unsorted; list should be kept sorted by LowerLimit
 	if err := rt.addBucketLocked(&kbA); err != nil {
-		t.Fatalf("AddBucket(kbA) failed: %v", err)
+		t.Fatalf("AddBucket A failed: %v", err)
 	}
 	if err := rt.addBucketLocked(&kbB); err != nil {
-		t.Fatalf("AddBucket(kbB) failed: %v", err)
+		t.Fatalf("AddBucket B failed: %v", err)
 	}
 	if err := rt.addBucketLocked(&kbC); err != nil {
-		t.Fatalf("AddBucket(kbC) failed: %v", err)
+		t.Fatalf("AddBucket C failed: %v", err)
 	}
 
 	if len(rt.BucketList) != 3 {
 		t.Fatalf("expected 3 buckets, got %d", len(rt.BucketList))
 	}
 
-	// Expect order by LowerLimit: kbB (0x00), kbC (0x40), kbA (0x80)
 	if rt.BucketList[0].LowerLimit != kbB.LowerLimit {
 		t.Errorf("bucket[0] lower = %v, want %v", rt.BucketList[0].LowerLimit, kbB.LowerLimit)
 	}
@@ -100,7 +106,7 @@ func TestRoutingTable_AddBucket_SortedInsertAndDuplicate(t *testing.T) {
 		t.Errorf("bucket[2] lower = %v, want %v", rt.BucketList[2].LowerLimit, kbA.LowerLimit)
 	}
 
-	// Duplicate insert should be rejected
+	// Duplicate insert should error
 	if err := rt.addBucketLocked(&kbB); err == nil {
 		t.Errorf("expected duplicate AddBucket(kbB) to error, got nil")
 	}
@@ -108,22 +114,17 @@ func TestRoutingTable_AddBucket_SortedInsertAndDuplicate(t *testing.T) {
 
 func TestRoutingTable_RemoveBucket(t *testing.T) {
 	var self [20]byte
+	lower := zeroID()
+	upper := maxID()
+	b := 2
+	K := 2
 
-	// Initial full range
-	var lower [20]byte
-	var upper [20]byte
-	for i := range upper {
-		upper[i] = 0xFF
-	}
-
-	rt, err := NewRoutingTable(self, lower, upper)
+	rt, err := NewRoutingTable(self, lower, upper, K, b)
 	if err != nil {
 		t.Fatalf("NewRoutingTable error: %v", err)
 	}
 
 	initial := rt.BucketList[0]
-
-	// Remove the initial bucket
 	if err := rt.removeBucketLocked(initial); err != nil {
 		t.Fatalf("RemoveBucket(initial) failed: %v", err)
 	}
@@ -131,66 +132,140 @@ func TestRoutingTable_RemoveBucket(t *testing.T) {
 		t.Fatalf("expected 0 buckets after removing initial, got %d", len(rt.BucketList))
 	}
 
-	// Removing again should error
 	if err := rt.removeBucketLocked(initial); err == nil {
 		t.Errorf("expected error when removing non-existent bucket, got nil")
 	}
 }
 
-func TestRoutingTable_SplitBucket(t *testing.T) {
-	var self [20]byte
+func TestUpdate_Splits_WhenBucketContainsSelf(t *testing.T) {
+	// Self is 0x80..., bucket is [0x80..00, 0x80..FF] so it contains self.
+	self := idWithFirstByte(0x80)
+	b := 2
+	K := 2
 
-	// Full range [0x00..00, 0xFF..FF]
-	var lower [20]byte
-	var upper [20]byte
-	for i := range upper {
-		upper[i] = 0xFF
-	}
-
-	rt, err := NewRoutingTable(self, lower, upper)
+	rt, err := NewRoutingTable(self, zeroID(), maxID(), K, b)
 	if err != nil {
 		t.Fatalf("NewRoutingTable error: %v", err)
 	}
 
-	origin := rt.BucketList[0]
+	// Replace initial with a small, self-containing bucket (capacity 2).
+	if err := rt.removeBucketLocked(rt.BucketList[0]); err != nil {
+		t.Fatalf("remove initial failed: %v", err)
+	}
+	lower := idWithFirstByte(0x80)
+	upper := upperWithFirstByte(0x84)
+	kb, _ := NewKBucket(2, lower, upper, nil, b)
+	if err := rt.addBucketLocked(&kb); err != nil {
+		t.Fatalf("add self bucket failed: %v", err)
+	}
+
+	// Fill to capacity
+	rt.Update(contactWithFirstByte(0x80, "h1"))
+	rt.Update(contactWithFirstByte(0x81, "h2"))
+
+	// Inserting a third should trigger split (contains self).
+	rt.Update(contactWithFirstByte(0x83, "h3"))
+
+	// Expect split into two contiguous buckets
+	if len(rt.BucketList) != 2 {
+		t.Fatalf("expected 2 buckets after split, got %d", len(rt.BucketList))
+	}
 	mid := midpoint(lower, upper)
-	midPlus := addOne(mid)
+	left := rt.BucketList[0]
+	right := rt.BucketList[1]
 
-	if err := rt.SplitBucket(origin); err != nil {
-		t.Fatalf("SplitBucket error: %v", err)
+	if left.LowerLimit != lower || left.UpperLimit != mid {
+		t.Errorf("left bounds want [%v..%v], got [%v..%v]", lower, mid, left.LowerLimit, left.UpperLimit)
+	}
+	if right.LowerLimit != addOne(mid) || right.UpperLimit != upper {
+		t.Errorf("right bounds want [%v..%v], got [%v..%v]", addOne(mid), upper, right.LowerLimit, right.UpperLimit)
+	}
+}
+
+func TestUpdate_Splits_OnNonSelf_WhenDepthModBNotZero(t *testing.T) {
+	// Self far away (0xA0...), bucket is [0x60..00, 0x7F..FF] → prefix 011x → depth=3 (non-self), b=2 → 3%2!=0 → can split.
+	self := idWithFirstByte(0xA0)
+	b := 2
+	K := 2
+
+	rt, err := NewRoutingTable(self, zeroID(), maxID(), K, b)
+	if err != nil {
+		t.Fatalf("NewRoutingTable error: %v", err)
 	}
 
-	// Expect two buckets, sorted, covering exactly [lower..mid] and [mid+1..upper]
-	if got := len(rt.BucketList); got != 2 {
-		t.Fatalf("expected 2 buckets after split, got %d", got)
+	if err := rt.removeBucketLocked(rt.BucketList[0]); err != nil {
+		t.Fatalf("remove initial failed: %v", err)
+	}
+	lower := idWithFirstByte(0x60)    // 0110 0000
+	upper := upperWithFirstByte(0x7F) // 0111 1111
+	kb, _ := NewKBucket(2, lower, upper, nil, b)
+	if err := rt.addBucketLocked(&kb); err != nil {
+		t.Fatalf("add non-self odd-depth bucket failed: %v", err)
 	}
 
-	b0 := rt.BucketList[0]
-	b1 := rt.BucketList[1]
+	// Fill to capacity
+	rt.Update(contactWithFirstByte(0x60, "h1"))
+	rt.Update(contactWithFirstByte(0x61, "h2"))
 
-	// Sorted by LowerLimit
-	if compare(b0.LowerLimit, b1.LowerLimit) > 0 {
-		t.Fatalf("buckets not sorted by LowerLimit: %v then %v", b0.LowerLimit, b1.LowerLimit)
-	}
+	// Insert third → should split (d=3, b=2)
+	rt.Update(contactWithFirstByte(0x7F, "h3"))
 
-	// First bucket is [lower, mid]
-	if b0.LowerLimit != lower {
-		t.Errorf("bucket0 lower want %v, got %v", lower, b0.LowerLimit)
-	}
-	if b0.UpperLimit != mid {
-		t.Errorf("bucket0 upper want %v, got %v", mid, b0.UpperLimit)
+	if len(rt.BucketList) != 2 {
+		t.Fatalf("expected 2 buckets after split, got %d", len(rt.BucketList))
 	}
 
-	// Second bucket is [mid+1, upper]
-	if b1.LowerLimit != midPlus {
-		t.Errorf("bucket1 lower want %v, got %v", midPlus, b1.LowerLimit)
+	mid := midpoint(lower, upper)
+	left := rt.BucketList[0]
+	right := rt.BucketList[1]
+
+	if left.LowerLimit != lower || left.UpperLimit != mid {
+		t.Errorf("left bounds want [%v..%v], got [%v..%v]", lower, mid, left.LowerLimit, left.UpperLimit)
 	}
-	if b1.UpperLimit != upper {
-		t.Errorf("bucket1 upper want %v, got %v", upper, b1.UpperLimit)
+	if right.LowerLimit != addOne(mid) || right.UpperLimit != upper {
+		t.Errorf("right bounds want [%v..%v], got [%v..%v]", addOne(mid), upper, right.LowerLimit, right.UpperLimit)
+	}
+}
+
+func TestUpdate_NoSplit_OnNonSelf_WhenDepthModBZero(t *testing.T) {
+	// Self far away (0xA0...), bucket is [0x00..00, 0x3F..FF] → prefix 00xx → depth=2 (non-self), b=2 → 2%2==0 → do NOT split.
+	self := idWithFirstByte(0xA0)
+	b := 2
+	K := 2
+
+	rt, err := NewRoutingTable(self, zeroID(), maxID(), K, b)
+	if err != nil {
+		t.Fatalf("NewRoutingTable error: %v", err)
 	}
 
-	// No gaps / overlaps
-	if addOne(b0.UpperLimit) != b1.LowerLimit {
-		t.Errorf("expected contiguous buckets: addOne(b0.Upper) == b1.Lower; got %v vs %v", addOne(b0.UpperLimit), b1.LowerLimit)
+	if err := rt.removeBucketLocked(rt.BucketList[0]); err != nil {
+		t.Fatalf("remove initial failed: %v", err)
+	}
+	lower := idWithFirstByte(0x00)    // 0000 0000
+	upper := upperWithFirstByte(0x3F) // 0011 1111
+	kb, _ := NewKBucket(2, lower, upper, nil, b)
+	if err := rt.addBucketLocked(&kb); err != nil {
+		t.Fatalf("add non-self even-depth bucket failed: %v", err)
+	}
+
+	// Fill to capacity
+	rt.Update(contactWithFirstByte(0x00, "h1"))
+	rt.Update(contactWithFirstByte(0x3F, "h2"))
+
+	// Insert third → should NOT split; bucket remains at capacity (replacement cache or drop).
+	rt.Update(contactWithFirstByte(0x01, "h3"))
+
+	if len(rt.BucketList) != 1 {
+		t.Fatalf("expected no split (1 bucket), got %d", len(rt.BucketList))
+	}
+	if got := len(rt.BucketList[0].Contacts); got != 2 {
+		t.Fatalf("expected bucket capacity 2 unchanged, got %d", got)
+	}
+
+	// Ensure new contact was NOT inserted (since policy said no split).
+	ids := rt.BucketList[0].Contacts
+	for _, c := range ids {
+		if c.ID == idWithFirstByte(0x01) {
+			t.Fatalf("unexpected insertion of 0x01 in non-self bucket at depth multiple of b")
+		}
 	}
 }

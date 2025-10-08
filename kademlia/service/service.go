@@ -457,6 +457,12 @@ func (s *Service) wake(id wire.RPCID, env wire.Envelope) {
 	s.mu.Lock()
 	if ch, ok := s.waiters[id]; ok {
 		delete(s.waiters, id)
+		// Deep-copy payload to detach from UDP read buffer
+		if len(env.Payload) > 0 {
+			pl := make([]byte, len(env.Payload))
+			copy(pl, env.Payload)
+			env.Payload = pl
+		}
 		ch <- env
 	}
 	s.mu.Unlock()
