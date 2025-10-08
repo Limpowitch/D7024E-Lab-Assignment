@@ -1,3 +1,6 @@
+//go:build !sim
+// +build !sim
+
 package transport
 
 import (
