@@ -1,16 +1,14 @@
 services:
   seed:
     image: kadlab:latest
-    # ENTRYPOINT comes from the image: ["/app/node"]
     command: ["serve",
       "-bind","0.0.0.0:9999",
       "-adv","seed:9999",
       "-ttl","30s",
       "-refresh","15s",
-      "-http=:8080"     # note the '=' to avoid any parsing weirdness
+      "-http=:8080"
     ]
     networks: [kadnet]
-    # publish REST for the seed if you want
     ports: ["18080:8080"]
     restart: unless-stopped
 
@@ -19,15 +17,11 @@ services:
     command: ["serve",
       "-bind","0.0.0.0:9999",
       "-seeds","seed:9999",
-      # You can skip -adv entirely; peers learn you from UDP source.
-      # If you really want it, prefer container DNS name:
-      # "-adv","node:9999",
       "-ttl","30s",
       "-refresh","15s",
       "-http=:8080"
     ]
     networks: [kadnet]
-    # no need to publish 8080 per replica unless you truly use REST externally
     restart: unless-stopped
 
 networks:
