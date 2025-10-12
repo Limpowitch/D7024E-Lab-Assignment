@@ -1,0 +1,1502 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>node: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/cmd/node/contact.go (100.0%)</option>
+				
+				<option value="file1">github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/cmd/node/contact_codec.go (82.9%)</option>
+				
+				<option value="file2">github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/cmd/node/get_value_iterative.go (87.9%)</option>
+				
+				<option value="file3">github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/cmd/node/id.go (100.0%)</option>
+				
+				<option value="file4">github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/cmd/node/kbucket.go (86.0%)</option>
+				
+				<option value="file5">github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/cmd/node/lookup.go (92.9%)</option>
+				
+				<option value="file6">github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/cmd/node/lookup_iterator.go (94.1%)</option>
+				
+				<option value="file7">github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/cmd/node/main.go (0.0%)</option>
+				
+				<option value="file8">github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/cmd/node/node.go (78.8%)</option>
+				
+				<option value="file9">github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/cmd/node/routingTable.go (91.1%)</option>
+				
+				<option value="file10">github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/cmd/node/routingTable_closest.go (100.0%)</option>
+				
+				<option value="file11">github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/cmd/node/value.go (100.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package node
+
+import (
+        "time"
+)
+
+type Contact struct {
+        ID       NodeID
+        Addr     string    // "host:port"
+        LastSeen time.Time // updated on successful RPC if we want to do as we talked about in sprint 0 review//samme
+}
+
+// Creates a new contact with given information.
+func NewContact(id NodeID, addr string) Contact <span class="cov8" title="1">{
+        return Contact{ID: id, Addr: addr}
+}</span>
+
+// sets LastSeen to now.
+func (c *Contact) Touch() <span class="cov8" title="1">{ c.LastSeen = time.Now() }</span>
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package node
+
+import (
+        "crypto/sha1"
+        "encoding/binary"
+        "errors"
+)
+
+// Encodes a contact to a byte slice and decodes a byte slice to a contact
+func (c Contact) MarshalBinary() []byte <span class="cov8" title="1">{
+        addr := []byte(c.Addr)
+        if len(addr) &gt; 255 </span><span class="cov0" title="0">{
+                addr = addr[:255]
+        }</span> // 1-byte length
+        <span class="cov8" title="1">out := make([]byte, 0, IDBytes+1+len(addr))
+        out = append(out, c.ID[:]...)      // 20B
+        out = append(out, byte(len(addr))) // 1B
+        out = append(out, addr...)         // len(addr)
+        return out</span>
+}
+
+// Decodes a byte slice to a contact
+func (c *Contact) UnmarshalBinary(b []byte) error <span class="cov8" title="1">{
+        if len(b) &lt; IDBytes+1 </span><span class="cov0" title="0">{
+                return errors.New("short contact")
+        }</span>
+        <span class="cov8" title="1">copy(c.ID[:], b[:IDBytes])
+        l := int(b[IDBytes])
+        if len(b) &lt; IDBytes+1+l </span><span class="cov0" title="0">{
+                return errors.New("short addr")
+        }</span>
+        <span class="cov8" title="1">c.Addr = string(b[IDBytes+1 : IDBytes+1+l])
+        return nil</span>
+}
+
+// Encodes a list of contacts
+func MarshalContactList(list []Contact) []byte <span class="cov8" title="1">{
+        out := make([]byte, 2)
+        binary.BigEndian.PutUint16(out[:2], uint16(len(list)))
+        for _, c := range list </span><span class="cov8" title="1">{
+                out = append(out, c.MarshalBinary()...)
+        }</span>
+        <span class="cov8" title="1">return out</span>
+}
+
+// Decodes a byte slice to a list of contacts
+func UnmarshalContactList(b []byte) ([]Contact, error) <span class="cov8" title="1">{
+        if len(b) &lt; 2 </span><span class="cov0" title="0">{
+                return nil, errors.New("short list")
+        }</span>
+        <span class="cov8" title="1">n := int(binary.BigEndian.Uint16(b[:2]))
+        b = b[2:]
+        res := make([]Contact, 0, n)
+        for i := 0; i &lt; n; i++ </span><span class="cov8" title="1">{
+                if len(b) &lt; IDBytes+1 </span><span class="cov0" title="0">{
+                        return nil, errors.New("short entry")
+                }</span>
+                <span class="cov8" title="1">l := int(b[IDBytes])
+                need := IDBytes + 1 + l
+                if len(b) &lt; need </span><span class="cov0" title="0">{
+                        return nil, errors.New("short entry addr")
+                }</span>
+                <span class="cov8" title="1">var c Contact
+                if err := c.UnmarshalBinary(b[:need]); err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">res = append(res, c)
+                b = b[need:]</span>
+        }
+        <span class="cov8" title="1">return res, nil</span>
+}
+
+// Returns the SHA-1 hash of the input bytes
+func SHA1ID(b []byte) [20]byte <span class="cov8" title="1">{
+        h := sha1.Sum(b)
+        return h
+}</span>
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package node
+
+import (
+        "context"
+        "log"
+        "sync"
+        "time"
+)
+
+// Iterative lookup for a value by its key
+func (n *Node) GetValueIterative(ctx context.Context, key [20]byte, seeds []Contact) (string, []Contact, error) <span class="cov8" title="1">{
+        foundCh := make(chan string, 1)
+
+        sl := newShortlist(key, K)
+        if len(seeds) == 0 </span><span class="cov0" title="0">{
+                seeds = n.RoutingTable.Closest(key, K)
+        }</span>
+        <span class="cov8" title="1">if len(seeds) &gt; 0 </span><span class="cov8" title="1">{
+                sl.add(seeds)
+        }</span>
+
+        <span class="cov8" title="1">for </span><span class="cov8" title="1">{
+                batch := sl.nextBatch(alpha)
+                if len(batch) == 0 </span><span class="cov8" title="1">{
+                        break</span>
+                }
+
+                // filter bad/self addrs
+                <span class="cov8" title="1">tmp := batch[:0]
+                for _, c := range batch </span><span class="cov8" title="1">{
+                        if c.ID == n.NodeID || c.Addr == "" || c.Addr[0] == ':' || c.Addr == n.Svc.Addr() </span><span class="cov8" title="1">{
+                                continue</span>
+                        }
+                        <span class="cov8" title="1">tmp = append(tmp, c)</span>
+                }
+                <span class="cov8" title="1">batch = tmp
+                if len(batch) == 0 </span><span class="cov8" title="1">{
+                        break</span>
+                }
+
+                <span class="cov8" title="1">var (
+                        wg     sync.WaitGroup
+                        mu     sync.Mutex // protects shortlist.add
+                        doneCh = make(chan struct{})
+                )
+
+                wg.Add(len(batch))
+                for _, c := range batch </span><span class="cov8" title="1">{
+                        c := c
+                        go func() </span><span class="cov8" title="1">{
+                                defer wg.Done()
+
+                                // Per-RPC timeout bounded by caller’s ctx
+                                rctx, rcancel := context.WithTimeout(ctx, 4*time.Second)
+                                defer rcancel()
+
+                                log.Printf("[iter] QUERY  -&gt; %s key=%x", c.Addr, key[:4])
+                                res, err := n.Svc.FindValue(rctx, c.Addr, key)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        log.Printf("[iter] ERROR &lt;- %s key=%x err=%v", c.Addr, key[:4], err)
+                                        return
+                                }</span>
+
+                                <span class="cov8" title="1">n.RoutingTable.Update(Contact{ID: c.ID, Addr: c.Addr})
+
+                                if res.Value != nil </span><span class="cov8" title="1">{
+                                        log.Printf("[iter] VALUE &lt;- %s key=%x len=%d", c.Addr, key[:4], len(res.Value))
+                                        select </span>{
+                                        case foundCh &lt;- string(res.Value):<span class="cov8" title="1"></span>
+                                        default:<span class="cov0" title="0"></span>
+                                        }
+                                        <span class="cov8" title="1">return</span>
+                                }
+
+                                <span class="cov8" title="1">if len(res.Contacts) &gt; 0 </span><span class="cov8" title="1">{
+                                        contacts, err := UnmarshalContactList(res.Contacts)
+                                        if err != nil </span><span class="cov0" title="0">{
+                                                return
+                                        }</span>
+                                        <span class="cov8" title="1">mu.Lock()
+                                        _ = sl.add(contacts) // we don't need the bool anymore
+                                        mu.Unlock()
+                                        for _, sc := range contacts </span><span class="cov8" title="1">{
+                                                if sc.ID == n.NodeID || sc.Addr == "" || sc.Addr[0] == ':' </span><span class="cov8" title="1">{
+                                                        continue</span>
+                                                }
+                                                <span class="cov8" title="1">n.RoutingTable.Update(sc)</span>
+                                        }
+                                }
+                        }()
+                }
+
+                <span class="cov8" title="1">go func() </span><span class="cov8" title="1">{ wg.Wait(); close(doneCh) }</span>()
+
+                <span class="cov8" title="1">select </span>{
+                case v := &lt;-foundCh:<span class="cov8" title="1">
+                        log.Printf("[iter] DELIVER len=%d", len(v))
+                        return v, nil, nil</span>
+
+                case &lt;-doneCh:<span class="cov8" title="1">
+                        // fire next batch (if any); nextBatch(alpha) will be empty if no progress
+                        continue</span>
+
+                case &lt;-ctx.Done():<span class="cov0" title="0">
+                        select </span>{
+                        case v := &lt;-foundCh:<span class="cov0" title="0">
+                                return v, nil, nil</span>
+                        default:<span class="cov0" title="0"></span>
+                        }
+                        <span class="cov0" title="0">return "", sl.contacts(), ctx.Err()</span>
+                }
+        }
+
+        <span class="cov8" title="1">return "", sl.contacts(), context.DeadlineExceeded</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package node
+
+import (
+        "crypto/rand"
+        "math/big"
+)
+
+const IDBytes = 20 // 160 bits
+
+type NodeID [IDBytes]byte
+
+// random 160-bit ID for testing purposes
+func RandomNodeID() (id NodeID) <span class="cov8" title="1">{ _, _ = rand.Read(id[:]); return }</span>
+
+// returns XOR distance for comparisons
+func Distance(a, b NodeID) *big.Int <span class="cov8" title="1">{
+        var x [IDBytes]byte
+        for i := 0; i &lt; IDBytes; i++ </span><span class="cov8" title="1">{
+                x[i] = a[i] ^ b[i]
+        }</span>
+        <span class="cov8" title="1">return new(big.Int).SetBytes(x[:])</span>
+}
+
+// return true if x is closer to target than y
+func Closer(target, x, y NodeID) bool <span class="cov8" title="1">{
+        dx := Distance(target, x)
+        dy := Distance(target, y)
+        return dx.Cmp(dy) &lt; 0
+}</span>
+
+func (id NodeID) IsZero() bool <span class="cov8" title="1">{
+        var z NodeID
+        return id == z
+}</span>
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package node
+
+import (
+        "errors"
+        "math/bits"
+        "sync"
+)
+
+type Kbucket struct {
+        Capacity   int
+        LowerLimit [20]byte
+        UpperLimit [20]byte
+        Contacts   []Contact
+        mu         sync.RWMutex
+        b          int
+}
+
+// Creates a new kbucket
+func NewKBucket(k int, lower, upper [20]byte, collection []Contact, b_val int) (Kbucket, error) <span class="cov8" title="1">{
+        return Kbucket{
+                Capacity:   k,
+                LowerLimit: lower,
+                UpperLimit: upper,
+                Contacts:   collection,
+                b:          b_val,
+        }, nil
+}</span>
+
+func (kb *Kbucket) AddToKBucket(id Contact) <span class="cov8" title="1">{ // We simply append here, no capacity check needed (will be handled elsewere)
+        kb.mu.Lock()
+        defer kb.mu.Unlock()
+        kb.Contacts = append(kb.Contacts, id)
+}</span>
+
+// Removes a contact from the kbucket
+func (kb *Kbucket) RemoveFromKBucket(c Contact) error <span class="cov8" title="1">{
+        kb.mu.Lock()
+        defer kb.mu.Unlock()
+
+        idx := -1
+        for i := 0; i &lt; len(kb.Contacts); i++ </span><span class="cov8" title="1">{
+                if kb.Contacts[i].ID == c.ID </span><span class="cov8" title="1">{
+                        idx = i
+                        break</span>
+                }
+        }
+        <span class="cov8" title="1">if idx == -1 </span><span class="cov8" title="1">{
+                return errors.New("contact is not inside kbucket")
+        }</span>
+
+        <span class="cov8" title="1">copy(kb.Contacts[idx:], kb.Contacts[idx+1:])
+        kb.Contacts = kb.Contacts[:len(kb.Contacts)-1]
+        return nil</span>
+}
+
+// Upsert tries to add or touch.
+// Returns true if the bucket is FULL and the caller must apply policy.
+func (kb *Kbucket) Upsert(c Contact) bool <span class="cov0" title="0">{
+        kb.mu.Lock()
+        defer kb.mu.Unlock()
+        return kb.upsertNoLock(c)
+}</span>
+
+// upsertNoLock performs the Upsert assuming kb.mu is already held.
+func (kb *Kbucket) upsertNoLock(c Contact) bool <span class="cov8" title="1">{
+        // already present → move to tail (LRU)
+        if kb.moveToTailIfExist(c) </span><span class="cov8" title="1">{
+                return false
+        }</span>
+        // space available → append
+        <span class="cov8" title="1">if len(kb.Contacts) &lt; kb.Capacity </span><span class="cov8" title="1">{
+                kb.Contacts = append(kb.Contacts, c)
+                return false
+        }</span>
+        // FULL → caller must apply policy (split/ping/replace)
+        <span class="cov8" title="1">return true</span>
+}
+
+// if the contact is already present in bucket, place it last (update for LRU-standard, essentially)
+func (kb *Kbucket) moveToTailIfExist(c Contact) bool <span class="cov8" title="1">{
+        for i := range kb.Contacts </span><span class="cov8" title="1">{
+                if kb.Contacts[i].ID == c.ID </span><span class="cov8" title="1">{
+                        temp := kb.Contacts[i]
+                        copy(kb.Contacts[i:], kb.Contacts[i+1:])
+                        kb.Contacts[len(kb.Contacts)-1] = temp
+                        return true
+                }</span>
+        }
+        <span class="cov8" title="1">return false</span>
+}
+
+func (kb *Kbucket) Depth() int <span class="cov8" title="1">{
+        a := kb.LowerLimit
+        b := kb.UpperLimit
+        depth := 0
+        for i := 0; i &lt; 20; i++ </span><span class="cov8" title="1">{
+                if a[i] == b[i] </span><span class="cov0" title="0">{
+                        depth += 8
+                        continue</span>
+                }
+                // first differing byte: count equal leading bits inside this byte
+                <span class="cov8" title="1">x := a[i] ^ b[i]
+                depth += bits.LeadingZeros8(x) // 0..8
+                return depth</span>
+        }
+        // identical bounds → degenerate range (all 160 bits fixed)
+        <span class="cov0" title="0">return 160</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package node
+
+import (
+        "sort"
+)
+
+const (
+        alpha = 3
+)
+
+// An entry in the shortlist
+type slEntry struct {
+        c   Contact
+        d   [20]byte // XOR distance to target
+        ask bool     // already queried?
+}
+
+type shortlist struct {
+        target [20]byte
+        k      int
+        max    int
+        idx    map[[20]byte]int // ID -&gt; index in 'list'
+        list   []slEntry
+}
+
+// creates a new shortlist for given target and k
+func newShortlist(target [20]byte, k int) *shortlist <span class="cov8" title="1">{
+        return &amp;shortlist{
+                target: target,
+                k:      k,
+                idx:    make(map[[20]byte]int),
+                list:   make([]slEntry, 0, k*2),
+                max:    k,
+        }
+}</span>
+
+// add merges contacts, dedups by ID, resorts by XOR, truncates to k.
+func (s *shortlist) add(cs []Contact) (changed bool) <span class="cov8" title="1">{
+        oldBest := s.best()
+        for _, c := range cs </span><span class="cov8" title="1">{
+                if _, ok := s.idx[c.ID]; ok </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+                <span class="cov8" title="1">s.list = append(s.list, slEntry{c: c, d: xor(s.target, c.ID)})
+                changed = true</span>
+        }
+        <span class="cov8" title="1">if changed </span><span class="cov8" title="1">{
+                sort.Slice(s.list, func(i, j int) bool </span><span class="cov8" title="1">{ return less160(s.list[i].d, s.list[j].d) }</span>)
+                <span class="cov8" title="1">if len(s.list) &gt; s.max </span><span class="cov8" title="1">{
+                        s.list = s.list[:s.max]
+                }</span>
+                <span class="cov8" title="1">s.rebuildIndex()
+                if !changed </span><span class="cov0" title="0">{
+                        // if only reorder happened (rare), also treating “best improved” as change just in case!
+                        changed = s.improved(oldBest)
+                }</span> else<span class="cov8" title="1"> {
+                        // definitely changed if best improved
+                        if s.improved(oldBest) </span><span class="cov8" title="1">{
+                                changed = true
+                        }</span>
+                }
+        }
+        <span class="cov8" title="1">return changed</span>
+}
+
+// Rebuilds the index map from the list
+func (s *shortlist) rebuildIndex() <span class="cov8" title="1">{
+        s.idx = make(map[[20]byte]int, len(s.list))
+        for i := range s.list </span><span class="cov8" title="1">{
+                s.idx[s.list[i].c.ID] = i
+        }</span>
+}
+
+// nextBatch returns alpha closest UNQUIERIED contacts and marks them
+func (s *shortlist) nextBatch(a int) []Contact <span class="cov8" title="1">{
+        out := make([]Contact, 0, a)
+        for i := range s.list </span><span class="cov8" title="1">{
+                if !s.list[i].ask </span><span class="cov8" title="1">{
+                        out = append(out, s.list[i].c)
+                        s.list[i].ask = true
+                        if len(out) == a </span><span class="cov0" title="0">{
+                                break</span>
+                        }
+                }
+        }
+        <span class="cov8" title="1">return out</span>
+}
+
+// improved returns true if the best distance became strictly smaller.
+func (s *shortlist) improved(prevBest [20]byte) bool <span class="cov8" title="1">{
+        if len(s.list) == 0 </span><span class="cov0" title="0">{
+                return false
+        }</span>
+        <span class="cov8" title="1">return less160(s.list[0].d, prevBest)</span>
+}
+
+// best returns current best distance (or all-FF if empty).
+func (s *shortlist) best() [20]byte <span class="cov8" title="1">{
+        if len(s.list) == 0 </span><span class="cov8" title="1">{
+                var ff [20]byte
+                for i := range ff </span><span class="cov8" title="1">{
+                        ff[i] = 0xff
+                }</span>
+                <span class="cov8" title="1">return ff</span>
+        }
+        <span class="cov8" title="1">return s.list[0].d</span>
+}
+
+// returns all contacts in the shortlist
+func (s *shortlist) contacts() []Contact <span class="cov8" title="1">{
+        out := make([]Contact, len(s.list))
+        for i := range s.list </span><span class="cov8" title="1">{
+                out[i] = s.list[i].c
+        }</span>
+        <span class="cov8" title="1">return out</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package node
+
+import (
+        "context"
+        "sync"
+        "time"
+)
+
+// iterative lookup for target. returns K-closest contacts it discovers
+func (n *Node) LookupNode(ctx context.Context, target [20]byte) ([]Contact, error) <span class="cov8" title="1">{
+        sl := newShortlist(target, K)
+
+        // seed with current routing table
+        sl.add(n.RoutingTable.Closest(target, K))
+
+        // if empty, we can still try any bootstrap peers you may have separately.
+        //prevBest := sl.best()
+
+        progressed := false
+
+        for </span><span class="cov8" title="1">{
+                batch := sl.nextBatch(alpha)
+                if len(batch) == 0 </span><span class="cov8" title="1">{
+                        // nothing left to ask
+                        break</span>
+                }
+
+                <span class="cov8" title="1">progressed = false
+
+                // alpha parallel. each response adds more contacts.
+                var wg sync.WaitGroup
+                var mu sync.Mutex // guard merging into shortlist
+                wg.Add(len(batch))
+
+                for _, c := range batch </span><span class="cov8" title="1">{
+                        c := c
+                        go func() </span><span class="cov8" title="1">{
+                                defer wg.Done()
+
+                                // one-RPC timeout per peer (don’t block the whole lookup)
+                                rpcCtx, cancel := context.WithTimeout(ctx, 800*time.Millisecond)
+                                defer cancel()
+
+                                raw, err := n.Svc.FindNode(rpcCtx, c.Addr, target)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return // timeout or network error → skip
+                                }</span>
+                                <span class="cov8" title="1">contacts, err := UnmarshalContactList(raw)
+                                if err != nil </span><span class="cov0" title="0">{
+                                        return
+                                }</span>
+
+                                // after you unmarshal contacts from a FIND_NODE_RESP
+                                <span class="cov8" title="1">for _, c := range contacts </span><span class="cov8" title="1">{
+                                        n.RoutingTable.Update(c) // add/refresh each suggested contact
+                                }</span>
+
+                                // update our routing table when we talk to someone.
+                                <span class="cov8" title="1">n.RoutingTable.Update(Contact{ID: c.ID, Addr: c.Addr})
+
+                                // finally merge into shortlist
+                                mu.Lock()
+                                if sl.add(contacts) </span><span class="cov8" title="1">{
+                                        progressed = true
+                                }</span>
+                                <span class="cov8" title="1">mu.Unlock()</span>
+                        }()
+                }
+                <span class="cov8" title="1">wg.Wait()
+
+                if !progressed </span><span class="cov8" title="1">{
+                        break</span>
+                }
+        }
+
+        <span class="cov8" title="1">return sl.contacts(), nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">// cmd/node/main.go
+package node
+
+import (
+        "flag"
+        "fmt"
+        "net"
+        "os"
+        "os/signal"
+        "strings"
+        "syscall"
+)
+
+func main() <span class="cov0" title="0">{
+        var bind string
+        var sendTo string
+        var msg string
+
+        var reply bool
+        var instance string
+
+        flag.StringVar(&amp;bind, "bind", ":9999", "udp bind address (something like :9999, 0.0.0.0:9999)")
+        flag.StringVar(&amp;sendTo, "send", "", "choose target host:port to send a message then exit")
+        flag.StringVar(&amp;msg, "msg", "", "send a message like --send (hostname)")
+
+        flag.BoolVar(&amp;reply, "reply", false, "if true auto replies 'ack' ")
+        flag.StringVar(&amp;instance, "instance", "", "simple label for each log")
+        flag.Parse()
+
+        //if non empty we build message and parse
+        if sendTo != "" </span><span class="cov0" title="0">{
+                if msg == "" </span><span class="cov0" title="0">{
+                        host, _ := os.Hostname()
+                        msg = "hello from " + host
+                }</span>
+                <span class="cov0" title="0">if err := sendOnce(sendTo, "msg:"+msg); err != nil </span><span class="cov0" title="0">{
+                        fmt.Println("send error:", err)
+                        os.Exit(1)
+                }</span>
+                <span class="cov0" title="0">fmt.Printf("[sent] to=%s msg=%q\n", sendTo, msg)
+                return</span>
+        }
+
+        // otherwise use the bind address and instance label and reply bool
+        <span class="cov0" title="0">if err := listenAndLog(bind, instance, reply); err != nil </span><span class="cov0" title="0">{
+                fmt.Println("listen error:", err)
+                os.Exit(1)
+        }</span>
+}
+
+func sendOnce(target, payload string) error <span class="cov0" title="0">{
+        conn, err := net.Dial("udp", target) // open udp socket
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">defer conn.Close()                   // always defer before action to ensure we release socket (straight from tutorial)
+        _, err = conn.Write([]byte(payload)) // send msg
+        return err</span>
+}
+
+func listenAndLog(bind, inst string, doReply bool) error <span class="cov0" title="0">{
+        pc, err := net.ListenPacket("udp", bind)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">defer pc.Close()
+
+        local := pc.LocalAddr().String() // print the actual bound address
+        if inst != "" </span><span class="cov0" title="0">{
+                fmt.Printf("listening on %s (%s) — ctrl-c to stop\n", local, inst)
+        }</span> else<span class="cov0" title="0"> {
+                fmt.Printf("listening on %s — ctrl-c to stop\n", local)
+        }</span>
+
+        // this should listen to if we do ctrl-c but it doesnt rly work....
+        <span class="cov0" title="0">sig := make(chan os.Signal, 1)
+        signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+        // ---------- improve this perhaps... ---------------
+
+        buf := make([]byte, 2048)
+        for </span><span class="cov0" title="0">{
+                select </span>{
+                case &lt;-sig:<span class="cov0" title="0">
+                        fmt.Println("\nbye")
+                        return nil</span>
+                default:<span class="cov0" title="0">
+                        n, from, err := pc.ReadFrom(buf) // n is amount of bytes received and from is sender addres
+                        if err != nil </span><span class="cov0" title="0">{
+                                return err
+                        }</span>
+
+                        // good format, like: "type:payload" structure
+                        <span class="cov0" title="0">body := string(buf[:n])
+                        typ, content := splitTypeBody(body)
+
+                        // just added this for container debugging.... it works more or less the same at this point, since it's working!
+                        if inst != "" </span><span class="cov0" title="0">{
+                                fmt.Printf("[recv] inst=%s from=%s type=%s len=%d msg=%q\n", inst, from.String(), typ, n, content)
+                        }</span> else<span class="cov0" title="0"> {
+                                fmt.Printf("[recv] from=%s type=%s len=%d msg=%q\n", from.String(), typ, n, content)
+                        }</span>
+
+                        <span class="cov0" title="0">if doReply </span><span class="cov0" title="0">{
+                                _, _ = pc.WriteTo([]byte("ack:ok"), from) // only if -reply is set
+                        }</span>
+                }
+        }
+}
+
+func splitTypeBody(s string) (typ, body string) <span class="cov0" title="0">{
+        i := strings.IndexByte(s, ':')
+        if i &lt; 0 </span><span class="cov0" title="0">{
+                return "default", s
+        }</span>
+        <span class="cov0" title="0">return s[:i], s[i+1:]</span>
+}
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">package node
+
+import (
+        "context"
+        "crypto/rand"
+        "fmt"
+        "log"
+        "os"
+        "sync"
+        "syscall"
+        "time"
+
+        "github.com/Limpowitch/D7024E-Lab-Assignment/kademlia/service"
+)
+
+const K = 2 // bucket size
+
+// A Kademlia node
+type Node struct {
+        NodeID       [20]byte
+        Addr         string // bind addr we listen on (e.g. "127.0.0.1:9999")
+        RoutingTable *RoutingTable
+        Store        map[string]Value
+        Svc          *service.Service
+        adv          string
+        ttl          time.Duration // how long values live
+        refreshEvery time.Duration // how often origin republisher runs
+
+        mu sync.RWMutex
+}
+
+// Creates a new node
+func NewNode(bind string, adv string, ttl time.Duration, refreshEvery time.Duration) (*Node, error) <span class="cov8" title="1">{
+        if refreshEvery &lt;= 0 </span><span class="cov0" title="0">{
+                refreshEvery = ttl / 2
+                if refreshEvery &lt;= 0 </span><span class="cov0" title="0">{
+                        refreshEvery = 30 * time.Second // should be a safe floor (for demos at least)
+                }</span>
+        }
+
+        // generate a random 160-bit node ID
+        <span class="cov8" title="1">var id [20]byte
+        if _, err := rand.Read(id[:]); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to generate node ID: %w", err)
+        }</span>
+
+        // full ID space [0..2^160-1]
+        <span class="cov8" title="1">var lower, upper [20]byte
+        for i := range upper </span><span class="cov8" title="1">{
+                upper[i] = 0xff
+        }</span>
+
+        /// IMPORTANT, HERE IS WHERE WE DECIDE OUR SPLIT METRIC
+        <span class="cov8" title="1">var b = 5
+
+        rt, err := NewRoutingTable(id, lower, upper, K, b)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        // create the RPC service bound to UDP
+        <span class="cov8" title="1">svc, err := service.New(bind, id, adv)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">n := &amp;Node{
+                NodeID:       id,
+                Addr:         bind,
+                RoutingTable: &amp;rt,
+                Store:        make(map[string]Value),
+                Svc:          svc,
+                adv:          adv,
+                ttl:          ttl,
+                refreshEvery: refreshEvery,
+        }
+
+        n.Svc.SetOnRefresh(func(key [20]byte) </span><span class="cov8" title="1">{
+                n.mu.Lock()
+                if v, ok := n.Store[string(key[:])]; ok </span><span class="cov8" title="1">{
+                        v.ExpiresAt = time.Now().Add(n.ttl)
+                        n.Store[string(key[:])] = v
+                }</span>
+                <span class="cov8" title="1">n.mu.Unlock()</span>
+        })
+
+        <span class="cov8" title="1">n.Svc.SetOnAdminForget(func(key [20]byte) bool </span><span class="cov8" title="1">{
+                n.mu.Lock()
+                defer n.mu.Unlock()
+                if _, ok := n.Store[string(key[:])]; !ok </span><span class="cov8" title="1">{
+                        return false
+                }</span>
+                <span class="cov8" title="1">delete(n.Store, string(key[:]))
+                return true</span>
+        })
+
+        <span class="cov8" title="1">n.Svc.SetOnExit(func() </span><span class="cov8" title="1">{
+                // need to unblock signal is serve. so we self signal:
+                p, _ := os.FindProcess(os.Getpid())
+                _ = p.Signal(syscall.SIGTERM)
+        }</span>)
+
+        // ADMIN_PUT: compute key, do lookup(key), store to K closest, return key.
+        <span class="cov8" title="1">n.Svc.SetOnAdminPut(func(value []byte) ([20]byte, error) </span><span class="cov8" title="1">{
+                key := SHA1ID(value)
+                ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+                defer cancel()
+                _, _ = n.LookupNode(ctx, key)
+
+                cs := n.RoutingTable.Closest(key, K)
+                if len(cs) == 0 </span><span class="cov0" title="0">{
+                        n.mu.Lock()
+                        n.Store[string(key[:])] = Value{
+                                Data:        append([]byte(nil), value...),
+                                Origin:      true,
+                                LastPublish: time.Now(),
+                                ExpiresAt:   time.Now().Add(n.ttl),
+                        }
+                        n.mu.Unlock()
+                        return key, nil
+                }</span>
+
+                <span class="cov8" title="1">var wg sync.WaitGroup
+                for _, c := range cs </span><span class="cov8" title="1">{
+                        wg.Add(1)
+                        go func(addr string) </span><span class="cov8" title="1">{
+                                defer wg.Done()
+                                ctx2, cancel2 := context.WithTimeout(context.Background(), 800*time.Millisecond)
+                                _ = n.Svc.Store(ctx2, addr, key, value)
+                                cancel2()
+                        }</span>(c.Addr)
+                }
+                <span class="cov8" title="1">wg.Wait()
+
+                // keep a local origin copy too (optional but convenient)
+                n.mu.Lock()
+                n.Store[string(key[:])] = Value{
+                        Data:        append([]byte(nil), value...),
+                        Origin:      true,
+                        LastPublish: time.Now(),
+                        ExpiresAt:   time.Now().Add(n.ttl),
+                }
+                n.mu.Unlock()
+
+                return key, nil</span>
+        })
+
+        // ADMIN_GET: iterative get using our RT (and any seeds already known).
+        // node/node.go (inside NewNode)
+        <span class="cov8" title="1">n.Svc.SetOnAdminGet(func(ctx context.Context, key [20]byte) ([]byte, bool) </span><span class="cov8" title="1">{
+                // Local fast path
+                n.mu.RLock()
+                if v, ok := n.Store[string(key[:])]; ok &amp;&amp; len(v.Data) &gt; 0 </span><span class="cov8" title="1">{
+                        out := append([]byte(nil), v.Data...)
+                        n.mu.RUnlock()
+                        return out, true
+                }</span>
+                <span class="cov0" title="0">n.mu.RUnlock()
+
+                seeds := n.RoutingTable.Closest(key, K) // fine if empty
+                val, _, err := n.GetValueIterative(ctx, key, seeds)
+                if err == nil &amp;&amp; val != "" </span><span class="cov0" title="0">{
+                        return []byte(val), true
+                }</span>
+                // Optional: log for clarity — you already have similar logs.
+                // log.Printf("[admin-get] MISS err=%v", err)
+                <span class="cov0" title="0">return nil, false</span>
+        })
+
+        // node/node.go (inside NewNode after n.Svc is created)
+        <span class="cov8" title="1">n.Svc.SetOnDumpRT(func() []byte </span><span class="cov0" title="0">{
+                var all []Contact
+                n.RoutingTable.mu.RLock()
+                for _, b := range n.RoutingTable.BucketList </span><span class="cov0" title="0">{
+                        b.mu.RLock()
+                        all = append(all, b.Contacts...)
+                        b.mu.RUnlock()
+                }</span>
+                <span class="cov0" title="0">n.RoutingTable.mu.RUnlock()
+                return MarshalContactList(all)</span> // node’s own marshal
+        })
+
+        // when we learn another nodes id (from ping i guess?) we update our routing table. done here initially
+        <span class="cov8" title="1">n.Svc.SetOnSeen(func(addr string, peerID [20]byte) </span><span class="cov0" title="0">{
+                if !isZero(peerID) </span><span class="cov0" title="0">{
+                        n.RoutingTable.Update(Contact{ID: peerID, Addr: addr})
+                }</span>
+        })
+
+        // when asked FIND_NODE we reply with k closest from our own routing table
+        <span class="cov8" title="1">n.Svc.SetOnFindNode(func(target [20]byte) []byte </span><span class="cov8" title="1">{
+                // start with our own contact so callers learn at least one node
+                self := Contact{ID: n.NodeID, Addr: n.AdvertisedAddr()}
+                cs := n.RoutingTable.Closest(target, K)
+
+                // avoid duplicate if we already have ourselves in RT (unlikely early)
+                out := []Contact{self}
+                for _, c := range cs </span><span class="cov8" title="1">{
+                        if c.ID != self.ID </span><span class="cov8" title="1">{
+                                out = append(out, c)
+                        }</span>
+                }
+                <span class="cov8" title="1">return MarshalContactList(out)</span>
+        })
+
+        <span class="cov8" title="1">n.Svc.SetOnStore(func(key [20]byte, val []byte) </span><span class="cov8" title="1">{
+                n.mu.Lock()
+                n.Store[string(key[:])] = Value{
+                        Data:      append([]byte(nil), val...),
+                        ExpiresAt: time.Now().Add(n.ttl),
+                }
+                n.mu.Unlock()
+                log.Printf("[node] STORED key=%x len=%d at %s", key[:], len(val), n.Svc.Addr())
+        }</span>)
+
+        <span class="cov8" title="1">n.Svc.SetOnFindValue(func(key [20]byte) ([]byte, []byte) </span><span class="cov8" title="1">{
+                n.mu.RLock()
+                v, ok := n.Store[string(key[:])]
+                n.mu.RUnlock()
+                if ok </span><span class="cov8" title="1">{
+                        n.mu.Lock()
+                        v.ExpiresAt = time.Now().Add(n.ttl)
+                        n.Store[string(key[:])] = v
+                        n.mu.Unlock()
+                        return append([]byte(nil), v.Data...), nil
+                }</span>
+                <span class="cov8" title="1">cs := n.RoutingTable.Closest(key, K)
+                return nil, MarshalContactList(cs)</span>
+        })
+
+        <span class="cov8" title="1">return n, nil</span>
+}
+
+func (n *Node) startRepublisher() <span class="cov8" title="1">{
+        tick := time.NewTicker(n.refreshEvery)
+        go func() </span><span class="cov8" title="1">{
+                for range tick.C </span><span class="cov8" title="1">{
+                        now := time.Now()
+                        var keys [][20]byte
+                        n.mu.RLock()
+                        for kStr, v := range n.Store </span><span class="cov8" title="1">{
+                                if !v.Origin </span><span class="cov8" title="1">{
+                                        continue</span>
+                                }
+                                <span class="cov8" title="1">if v.LastPublish.IsZero() || now.Sub(v.LastPublish) &gt;= n.refreshEvery </span><span class="cov8" title="1">{
+                                        var key [20]byte
+                                        copy(key[:], []byte(kStr)[:20])
+                                        keys = append(keys, key)
+                                }</span>
+                        }
+                        <span class="cov8" title="1">n.mu.RUnlock()
+
+                        for _, key := range keys </span><span class="cov8" title="1">{
+                                cs := n.RoutingTable.Closest(key, K)
+                                var wg sync.WaitGroup
+                                for _, c := range cs </span><span class="cov8" title="1">{
+                                        wg.Add(1)
+                                        go func(addr string, key [20]byte) </span><span class="cov8" title="1">{
+                                                defer wg.Done()
+                                                ctx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
+                                                _ = n.Svc.Refresh(ctx, addr, key)
+                                                cancel()
+                                        }</span>(c.Addr, key)
+                                }
+                                <span class="cov8" title="1">wg.Wait()
+
+                                n.mu.Lock()
+                                v := n.Store[string(key[:])]
+                                v.LastPublish = now
+                                n.Store[string(key[:])] = v
+                                n.mu.Unlock()</span>
+                        }
+                }
+        }()
+}
+
+// Returns the adress thats being advertised to other nodes
+func (n *Node) AdvertisedAddr() string <span class="cov8" title="1">{
+        if n.Svc.SelfAddr != "" </span><span class="cov8" title="1">{
+                return n.Svc.SelfAddr
+        }</span>
+        <span class="cov8" title="1">return n.Svc.Addr()</span> // fallback to real bound address
+}
+
+// Finds the given node ID
+func (n *Node) FindNode(to string, target [20]byte) ([]Contact, error) <span class="cov8" title="1">{
+        ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+        defer cancel()
+        payload, err := n.Svc.FindNode(ctx, to, target)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return UnmarshalContactList(payload)</span>
+}
+
+// Starts the service and bootstraps the node
+func (n *Node) Start() <span class="cov8" title="1">{
+        // GC ticker (U1)
+        gc := time.NewTicker(1 * time.Minute)
+        go func() </span><span class="cov8" title="1">{
+                for range gc.C </span><span class="cov0" title="0">{
+                        now := time.Now()
+                        n.mu.Lock()
+                        for k, v := range n.Store </span><span class="cov0" title="0">{
+                                if !v.ExpiresAt.IsZero() &amp;&amp; now.After(v.ExpiresAt) </span><span class="cov0" title="0">{
+                                        delete(n.Store, k)
+                                }</span>
+                        }
+                        <span class="cov0" title="0">n.mu.Unlock()</span>
+                }
+        }()
+
+        // Republisher ticker (U2)
+        <span class="cov8" title="1">n.startRepublisher()
+
+        n.Svc.Start()
+        go n.bootstrap()</span>
+}
+
+// Bootstraps the node and populates its routing table
+func (n *Node) bootstrap() <span class="cov8" title="1">{
+        ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+        defer cancel()
+        _, _ = n.LookupNode(ctx, n.NodeID)
+}</span>
+
+// Closes the node and its service
+func (n *Node) Close() error <span class="cov8" title="1">{
+        return n.Svc.Close()
+}</span>
+
+// Checks if a NodeID is all zeroes
+func isZero(id [20]byte) bool <span class="cov0" title="0">{
+        var z [20]byte
+        return id == z
+}</span>
+</pre>
+		
+		<pre class="file" id="file9" style="display: none">package node
+
+import (
+        "errors"
+        "fmt"
+        "strings"
+        "sync"
+)
+
+type RoutingTable struct {
+        SelfID     [20]byte
+        BucketList []*Kbucket
+        mu         sync.RWMutex
+}
+
+// Creates a new routing table with a single kbucket that is covering the entire id space
+func NewRoutingTable(SelfId, lower, upper [20]byte, K, b_val int) (RoutingTable, error) <span class="cov8" title="1">{
+
+        rt := RoutingTable{
+                SelfID:     SelfId,
+                BucketList: make([]*Kbucket, 1),
+        }
+
+        kb, err := NewKBucket(K, lower, upper, nil, b_val)
+        if err != nil </span><span class="cov0" title="0">{
+                return RoutingTable{}, errors.New("failed to create initial kbucket")
+        }</span>
+
+        <span class="cov8" title="1">rt.BucketList[0] = &amp;kb
+        return rt, nil</span>
+}
+
+// adds a bucket to the routing table
+func (rt *RoutingTable) addBucketLocked(kb *Kbucket) error <span class="cov8" title="1">{
+
+        lower := kb.LowerLimit
+        upper := kb.UpperLimit
+
+        if len(rt.BucketList) == 0 </span><span class="cov8" title="1">{
+                rt.BucketList = append(rt.BucketList, kb)
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">insertAt := len(rt.BucketList)
+        for i := 0; i &lt; len(rt.BucketList); i++ </span><span class="cov8" title="1">{
+                b := rt.BucketList[i]
+
+                if b.LowerLimit == lower &amp;&amp; b.UpperLimit == upper </span><span class="cov8" title="1">{
+                        return errors.New("kbucket already exists in routing table")
+                }</span>
+
+                // find first bucket whose lower &gt;= new.lower -&gt; insert before it
+                <span class="cov8" title="1">if !less160(b.LowerLimit, lower) </span><span class="cov8" title="1">{
+                        insertAt = i
+                        break</span>
+                }
+        }
+
+        <span class="cov8" title="1">rt.BucketList = append(rt.BucketList, &amp;Kbucket{})
+        copy(rt.BucketList[insertAt+1:], rt.BucketList[insertAt:])
+        rt.BucketList[insertAt] = kb
+        return nil</span>
+}
+
+// removes a bucket from the routing table
+func (rt *RoutingTable) removeBucketLocked(kb *Kbucket) error <span class="cov8" title="1">{
+
+        if len(rt.BucketList) == 0 </span><span class="cov8" title="1">{
+                return errors.New("routing table contains no kbuckets")
+        }</span>
+
+        <span class="cov8" title="1">idx := -1
+        for i := range rt.BucketList </span><span class="cov8" title="1">{
+                b := rt.BucketList[i]
+                if b.LowerLimit == kb.LowerLimit &amp;&amp; b.UpperLimit == kb.UpperLimit </span><span class="cov8" title="1">{
+                        idx = i
+                        break</span>
+                }
+        }
+        <span class="cov8" title="1">if idx == -1 </span><span class="cov0" title="0">{
+                return errors.New("kbucket not found in routing table")
+        }</span>
+
+        <span class="cov8" title="1">copy(rt.BucketList[idx:], rt.BucketList[idx+1:])
+        rt.BucketList = rt.BucketList[:len(rt.BucketList)-1]
+        return nil</span>
+}
+
+// containsSelf reports whether SelfID lies in kb's [lower, upper] inclusive.
+func (rt *RoutingTable) containsSelf(kb *Kbucket) bool <span class="cov8" title="1">{
+        return compare(rt.SelfID, kb.LowerLimit) &gt;= 0 &amp;&amp;
+                compare(rt.SelfID, kb.UpperLimit) &lt;= 0
+}</span>
+
+// Update should be called whenever an RPC succeeds for contact c.
+func (rt *RoutingTable) Update(c Contact) int <span class="cov8" title="1">{
+        didSplit := false
+        for </span><span class="cov8" title="1">{
+                // (1) Locate the leaf and grab its lock while we still hold rt.mu.RLock.
+                rt.mu.RLock()
+                i := rt.bucketIndexFor(c.ID)
+                if i &lt; 0 </span><span class="cov0" title="0">{
+                        rt.mu.RUnlock()
+                        return 0
+                }</span>
+                <span class="cov8" title="1">kb := rt.BucketList[i]
+                kb.mu.Lock()
+                rt.mu.RUnlock()
+
+                // (2) Upsert under the bucket lock.
+                needsPolicy := kb.upsertNoLock(c)
+                kb.mu.Unlock()
+                if !needsPolicy </span><span class="cov8" title="1">{
+                        if didSplit </span><span class="cov8" title="1">{
+                                return 5
+                        }</span>
+                        <span class="cov8" title="1">return 1</span>
+                }
+
+                // (3) FULL → consider split under writer lock.
+                <span class="cov8" title="1">rt.mu.Lock()
+                // If someone else already split/removed this bucket, just continue.
+                stillThere := false
+                for _, b := range rt.BucketList </span><span class="cov8" title="1">{
+                        if b == kb </span><span class="cov8" title="1">{
+                                stillThere = true
+                                break</span>
+                        }
+                }
+                <span class="cov8" title="1">if !stillThere </span><span class="cov0" title="0">{
+                        rt.mu.Unlock()
+                        didSplit = true
+                        continue</span>
+                }
+
+                // Re-check eligibility while holding rt.mu.
+                <span class="cov8" title="1">eligible := rt.containsSelf(kb) || (kb.Depth()%kb.b != 0)
+                if !eligible </span><span class="cov8" title="1">{
+                        rt.mu.Unlock()
+                        return 4
+                }</span>
+
+                // (4) Perform the split while protecting the bucket’s Contacts.
+                <span class="cov8" title="1">_ = rt.splitBucketLocked(kb)
+                rt.mu.Unlock()
+                didSplit = true</span>
+                // (5) Loop to re-locate the correct child and try again.
+        }
+}
+
+// Splits a bucket into two new buckets
+func (rt *RoutingTable) SplitBucket(originBucket *Kbucket) error <span class="cov0" title="0">{
+
+        rt.mu.Lock()
+        defer rt.mu.Unlock()
+        return rt.splitBucketLocked(originBucket)
+}</span>
+
+func (rt *RoutingTable) splitBucketLocked(originBucket *Kbucket) error <span class="cov8" title="1">{
+        // Protect access to Contacts during partitioning.
+        originBucket.mu.Lock()
+        mid := midpoint(originBucket.LowerLimit, originBucket.UpperLimit)
+
+        kb1Lower := originBucket.LowerLimit
+        kb1Upper := mid
+        kb2Lower := addOne(mid)
+        kb2Upper := originBucket.UpperLimit
+
+        var kb1Contacts, kb2Contacts []Contact
+        for _, c := range originBucket.Contacts </span><span class="cov8" title="1">{
+                if compare(c.ID, kb1Lower) &gt;= 0 &amp;&amp; compare(c.ID, kb1Upper) &lt;= 0 </span><span class="cov8" title="1">{
+                        kb1Contacts = append(kb1Contacts, c)
+                }</span> else<span class="cov8" title="1"> {
+                        kb2Contacts = append(kb2Contacts, c)
+                }</span>
+        }
+        <span class="cov8" title="1">originBucket.mu.Unlock()
+
+        kb1, _ := NewKBucket(originBucket.Capacity, kb1Lower, kb1Upper, kb1Contacts, originBucket.b) // Bucket1 = [originbucket.lower, mid]
+        kb2, _ := NewKBucket(originBucket.Capacity, kb2Lower, kb2Upper, kb2Contacts, originBucket.b) // Bucket2 = [mid + 1, originbucket.upper]
+
+        // Remove the old one; ignore error if already removed by a concurrent splitter.
+        _ = rt.removeBucketLocked(originBucket)
+        _ = rt.addBucketLocked(&amp;kb1)
+        _ = rt.addBucketLocked(&amp;kb2)
+        return nil</span>
+}
+
+// following 3 functions below are simple helper functions, since we cant do simple arithmatic on [20]byte
+
+func compare(a, b [20]byte) int <span class="cov8" title="1">{ // compare returns -1 if a&lt;b, 0 if a==b, 1 if a&gt;b
+        for i := 0; i &lt; 20; i++ </span><span class="cov8" title="1">{
+                if a[i] &lt; b[i] </span><span class="cov8" title="1">{
+                        return -1
+                }</span> else<span class="cov8" title="1"> if a[i] &gt; b[i] </span><span class="cov8" title="1">{
+                        return 1
+                }</span>
+        }
+        <span class="cov8" title="1">return 0</span>
+}
+
+func addOne(x [20]byte) [20]byte <span class="cov8" title="1">{ // addOne returns x+1 (mod 2^160)
+        var out [20]byte
+        carry := byte(1)
+        for i := 19; i &gt;= 0; i-- </span><span class="cov8" title="1">{
+                sum := uint16(x[i]) + uint16(carry)
+                out[i] = byte(sum &amp; 0xff)
+                carry = byte(sum &gt;&gt; 8)
+        }</span>
+        <span class="cov8" title="1">return out</span>
+}
+
+func midpoint(a, b [20]byte) [20]byte <span class="cov8" title="1">{
+        // diff = b - a  (big-endian)
+        var diff [20]byte
+        var borrow uint16
+        for i := 19; i &gt;= 0; i-- </span><span class="cov8" title="1">{
+                bi := uint16(b[i])
+                ai := uint16(a[i])
+                if bi &lt; ai+borrow </span><span class="cov0" title="0">{
+                        diff[i] = byte(256 + bi - ai - borrow)
+                        borrow = 1
+                }</span> else<span class="cov8" title="1"> {
+                        diff[i] = byte(bi - ai - borrow)
+                        borrow = 0
+                }</span>
+        }
+
+        // half = diff &gt;&gt; 1  (big-endian right shift by 1)
+        <span class="cov8" title="1">var half [20]byte
+        var carry byte
+        for i := 0; i &lt; 20; i++ </span><span class="cov8" title="1">{
+                v := (uint16(carry) &lt;&lt; 8) | uint16(diff[i])
+                half[i] = byte(v &gt;&gt; 1)
+                carry = byte(v &amp; 1)
+        }</span>
+
+        // out = a + half
+        <span class="cov8" title="1">var out [20]byte
+        var c uint16
+        for i := 19; i &gt;= 0; i-- </span><span class="cov8" title="1">{
+                sum := uint16(a[i]) + uint16(half[i]) + c
+                out[i] = byte(sum &amp; 0xff)
+                c = sum &gt;&gt; 8
+        }</span>
+        <span class="cov8" title="1">return out</span>
+}
+
+func (rt *RoutingTable) bucketIndexFor(id [20]byte) int <span class="cov8" title="1">{
+        for i := range rt.BucketList </span><span class="cov8" title="1">{
+                b := rt.BucketList[i]
+                if compare(id, b.LowerLimit) &gt;= 0 &amp;&amp; compare(id, b.UpperLimit) &lt;= 0 </span><span class="cov8" title="1">{
+                        return i
+                }</span>
+        }
+        <span class="cov0" title="0">return -1</span>
+}
+
+// in node/routingtable.go
+func (rt *RoutingTable) Dump() string <span class="cov8" title="1">{
+        rt.mu.RLock()
+        defer rt.mu.RUnlock()
+
+        var sb strings.Builder
+        fmt.Fprintf(&amp;sb, "self=%x\n", rt.SelfID[:4])
+        for i, b := range rt.BucketList </span><span class="cov8" title="1">{
+                b.mu.RLock()
+                fmt.Fprintf(&amp;sb, "bucket[%02d] [%x..%x] depth=%d b=%d contacts=%d\n",
+                        i, b.LowerLimit[:2], b.UpperLimit[:2], b.Depth(), b.b, len(b.Contacts))
+                for _, c := range b.Contacts </span><span class="cov8" title="1">{
+                        fmt.Fprintf(&amp;sb, "  - %x %s\n", c.ID[:4], c.Addr)
+                }</span>
+                <span class="cov8" title="1">b.mu.RUnlock()</span>
+        }
+        <span class="cov8" title="1">return sb.String()</span>
+}
+
+func (rt *RoutingTable) BucketsLen() int <span class="cov8" title="1">{
+        rt.mu.RLock()
+        defer rt.mu.RUnlock()
+        return len(rt.BucketList)
+}</span>
+</pre>
+		
+		<pre class="file" id="file10" style="display: none">package node
+
+import "sort"
+
+// Returns the k closest contacts to the target ID from the routing table
+func xor(a, b [20]byte) (out [20]byte) <span class="cov8" title="1">{
+        for i := 0; i &lt; 20; i++ </span><span class="cov8" title="1">{
+                out[i] = a[i] ^ b[i]
+        }</span>
+        <span class="cov8" title="1">return</span>
+}
+
+// Compares two 160 bit values
+func less160(a, b [20]byte) bool <span class="cov8" title="1">{ // moved it here because it made more sense in my view
+        for i := 0; i &lt; 20; i++ </span><span class="cov8" title="1">{
+                if a[i] != b[i] </span><span class="cov8" title="1">{
+                        return a[i] &lt; b[i]
+                }</span>
+        }
+        <span class="cov8" title="1">return false</span>
+}
+
+// Returns the k closest contacts to the target ID
+func (rt *RoutingTable) Closest(target [20]byte, k int) []Contact <span class="cov8" title="1">{
+        rt.mu.RLock()
+        defer rt.mu.RUnlock()
+
+        type pair struct {
+                c Contact
+                d [20]byte
+        }
+        tmp := make([]pair, 0, 64)
+
+        for _, b := range rt.BucketList </span><span class="cov8" title="1">{
+                b.mu.RLock()
+                for _, c := range b.Contacts </span><span class="cov8" title="1">{
+                        tmp = append(tmp, pair{c: c, d: xor(target, c.ID)})
+                }</span>
+                <span class="cov8" title="1">b.mu.RUnlock()</span>
+        }
+
+        <span class="cov8" title="1">sort.Slice(tmp, func(i, j int) bool </span><span class="cov8" title="1">{ return less160(tmp[i].d, tmp[j].d) }</span>)
+        <span class="cov8" title="1">if k &gt; len(tmp) </span><span class="cov8" title="1">{
+                k = len(tmp)
+        }</span>
+        <span class="cov8" title="1">out := make([]Contact, k)
+        for i := 0; i &lt; k; i++ </span><span class="cov8" title="1">{
+                out[i] = tmp[i].c
+        }</span>
+        <span class="cov8" title="1">return out</span>
+}
+</pre>
+		
+		<pre class="file" id="file11" style="display: none">package node
+
+import (
+        "time"
+)
+
+type Value struct {
+        Data        []byte
+        Origin      bool
+        LastPublish time.Time
+        ExpiresAt   time.Time
+}
+
+func NewValue(data []byte, ttl time.Duration) Value <span class="cov8" title="1">{
+        return Value{
+                Data:      append([]byte(nil), data...),
+                ExpiresAt: time.Now().Add(ttl),
+        }
+}</span>
+
+func (v Value) Expired(now time.Time) bool <span class="cov8" title="1">{ // Future implimentation...
+
+        return !now.Before(v.ExpiresAt) // this should work for the tests. change if needed//samme
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
