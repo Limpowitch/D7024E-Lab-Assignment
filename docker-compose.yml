@@ -1,38 +1,29 @@
-# docker-compose.yml
-# services:
-#   node:
-#     image: kadlab:latest           # or use "build: ." if you prefer
-#     command: ["/app/node", "-bind", ":9999"]
-#     environment:
-#       - INSTANCE=${HOSTNAME:-node}
-#     networks: [kadnet]
-#     restart: unless-stopped
-
-# networks:
-#   kadnet:
-#     driver: bridge
-
-# docker-compose.yml
-# docker-compose.yml
 services:
   seed:
     image: kadlab:latest
-    command: ["serve","-bind","0.0.0.0:9999","-adv","seed:9999","-ttl","30s","-refresh","15s","-http",":8080"]
+    command: ["serve",
+      "-bind","0.0.0.0:9999",
+      "-adv","seed:9999",
+      "-ttl","30s",
+      "-refresh","15s",
+      "-http=:8080"
+    ]
     networks: [kadnet]
-    ports:
-      - "18080:8080"   # publish REST
+    ports: ["18080:8080"]
+    restart: unless-stopped
 
   node:
     image: kadlab:latest
-    command: ["serve","-bind","0.0.0.0:9999","-seeds","seed:9999","-adv","${HOSTNAME}:9999","-ttl","30s","-refresh","15s","-http",":8080"]
+    command: ["serve",
+      "-bind","0.0.0.0:9999",
+      "-seeds","seed:9999",
+      "-ttl","30s",
+      "-refresh","15s",
+      "-http=:8080"
+    ]
     networks: [kadnet]
-    ports:
-      - "8080"    
+    restart: unless-stopped
 
 networks:
   kadnet:
     driver: bridge
-
-
-# docker-compose.yml
-

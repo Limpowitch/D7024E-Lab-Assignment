@@ -321,7 +321,35 @@ func (n *Node) Start() {
 func (n *Node) bootstrap() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
+
+	// Kick one or more lookups (self + a couple randoms helps bucket spread)
 	_, _ = n.LookupNode(ctx, n.NodeID)
+
+	// Allow async OnSeen/FindNode responses to populate the RT
+	const tries = 3
+	for i := 0; i < tries; i++ {
+		if i > 0 {
+			time.Sleep(300 * time.Millisecond)
+		}
+		if n.knownContacts() > 0 {
+			log.Printf("[bootstrap] ✅ learned %d contacts", n.knownContacts())
+			return
+		}
+	}
+
+	log.Printf("[bootstrap] ❌ no contacts found after bootstrap — possible seed unreachable or network split")
+}
+
+func (n *Node) knownContacts() int {
+	n.RoutingTable.mu.RLock()
+	defer n.RoutingTable.mu.RUnlock()
+	sum := 0
+	for _, b := range n.RoutingTable.BucketList {
+		b.mu.RLock()
+		sum += len(b.Contacts)
+		b.mu.RUnlock()
+	}
+	return sum
 }
 
 // Closes the node and its service
