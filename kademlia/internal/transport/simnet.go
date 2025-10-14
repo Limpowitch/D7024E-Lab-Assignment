@@ -169,7 +169,7 @@ func (s *UDPServer) enqueue(to string, env wire.Envelope, onReply func(wire.Enve
 		return false
 	}
 
-	if simRNG.Float64() < simDropProb {
+	if simRNG.Float64() < simDropProb { // Here is it we decide to drop the packet with prob simDropProb
 		atomic.AddUint64(&simDropped, 1)
 		return true // silent drop; caller eventually times out
 	}

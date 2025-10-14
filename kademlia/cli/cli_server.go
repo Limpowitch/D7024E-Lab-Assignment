@@ -29,6 +29,7 @@ func (a objectNodeAdapter) HandleStore(_ [20]byte, data []byte, _ time.Duration)
 	return err
 }
 
+// Lookup value
 func (a objectNodeAdapter) LookupValue(hexKey string) ([]byte, bool) {
 	b, err := hex.DecodeString(hexKey)
 	if err != nil || len(b) != 20 {
@@ -46,6 +47,7 @@ func (a objectNodeAdapter) LookupValue(hexKey string) ([]byte, bool) {
 	return val, true
 }
 
+// Serve for starting a kademlia node
 func cmdServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	ttlStr := fs.String("ttl", "24h", "TTL for stored values (e.g. 30s, 10m, 24h)")
@@ -53,7 +55,7 @@ func cmdServe(args []string) error {
 	bind := fs.String("bind", "0.0.0.0:9999", "UDP bind address")
 	seeds := fs.String("seeds", "", "comma-separated bootstrap peers host:port")
 	adv := fs.String("adv", "", "advertised addr host:port")
-	httpBind := fs.String("http", ":8080", "REST API bind") // <-- add this
+	httpBind := fs.String("http", ":8080", "REST API bind")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -82,7 +84,7 @@ func cmdServe(args []string) error {
 
 	mux.Handle("/objects", api.NewObjectsMux(adapter))  // POST /objects
 	mux.Handle("/objects/", api.NewObjectsMux(adapter)) // GET  /objects/{hash}
-
+	// starts the REST server
 	go func() {
 		log.Printf("REST listening on %s", *httpBind)
 		if err := http.ListenAndServe(*httpBind, mux); err != nil {
@@ -124,6 +126,7 @@ func cmdServe(args []string) error {
 	return n.Close()
 }
 
+// Forget function used to remove key from the network
 func cmdForget(args []string) error {
 	fs := flag.NewFlagSet("forget", flag.ContinueOnError)
 	to := fs.String("to", "127.0.0.1:9999", "address of local daemon")
@@ -158,6 +161,7 @@ func cmdForget(args []string) error {
 	return nil
 }
 
+// Exit function to shutdown a node
 func cmdExit(args []string) error {
 	fs := flag.NewFlagSet("exit", flag.ContinueOnError)
 	to := fs.String("to", "127.0.0.1:9999", "address of local daemon")

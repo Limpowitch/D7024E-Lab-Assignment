@@ -130,7 +130,7 @@ func TestSim_EmulateCluster_FindValue(t *testing.T) {
 	// Uses the first node as a seed for the rest of the nodes
 	seed := nodes[0]
 
-	// --- Record stats before bootstrap chatter + PUT
+	// Record stats before bootstrap chatter + PUT
 	b0Sent, b0Delivered, b0Dropped := transport.SimStats()
 
 	// Have every node needed to ping the seed node to join the network
@@ -175,7 +175,7 @@ func TestSim_EmulateCluster_FindValue(t *testing.T) {
 	transport.SetDropProbability(*simDrop)
 
 	// The setter for the amount of gets to do, and counters for the amount of successful gets and errors
-	const numGets = 50
+	const numGets = 1000
 	var okCount int64
 	var errCount int64
 
